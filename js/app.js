@@ -18,7 +18,7 @@ import { reportsView } from "./views/reports.js";
 import { settingsView, applyTheme } from "./views/settings.js";
 import { seedDemo } from "./seed.js";
 
-window.OVAL_VERSION = "1.0.0";
+window.OVAL_VERSION = "1.0.1";
 const cfg = window.OVAL_CONFIG || {};
 const LS = {
   get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },

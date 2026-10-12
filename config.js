@@ -3,9 +3,8 @@
 // See docs/SETUP.md for the step-by-step guide.
 window.OVAL_CONFIG = {
   // OAuth 2.0 Web client ID from Google Cloud Console (APIs & Services > Credentials).
-  // This is the same client the Personal Assistant app uses, so it already works on
-  // https://midhunvijayvs.github.io. Swap in a dedicated "Oval Farms ERP" client when you can.
-  GOOGLE_CLIENT_ID: "196324205483-t6ulmlbh78gau4q0dg637t9bt8k8upjs.apps.googleusercontent.com",
+  // "Oval Farms ERP" project owned by ovaleggfarm@gmail.com.
+  GOOGLE_CLIENT_ID: "69145806484-62td7dt2gb0sgtndr0am45kd0fenqc25.apps.googleusercontent.com",
 
   // ID of the shared "Oval Farms ERP" folder in the Oval Farms Google Drive.
   // Leave empty to let each person paste the folder link (or open an invite link) on first sign-in.
