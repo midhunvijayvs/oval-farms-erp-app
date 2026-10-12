@@ -1,6 +1,6 @@
 // Service worker: caches the app shell so Oval Farms ERP opens instantly and works offline.
 // Business data is not cached here; it lives in Google Drive (and IndexedDB on each device).
-const VERSION = "oval-erp-v1.0.0";
+const VERSION = "oval-erp-v1.0.1";
 const SHELL = [
   "./", "./index.html", "./manifest.webmanifest", "./config.js", "./css/app.css",
   "./assets/logo.png", "./assets/icon-192.png", "./assets/icon-512.png", "./assets/icon-maskable-512.png", "./assets/apple-touch-icon.png", "./assets/favicon-64.png",
