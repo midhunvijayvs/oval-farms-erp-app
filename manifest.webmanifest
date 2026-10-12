@@ -1,0 +1,22 @@
+{
+  "name": "Oval Farms ERP",
+  "short_name": "Oval ERP",
+  "description": "Production, stock, sales, purchases, staff and accounts for Oval Farms.",
+  "id": "./",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#1f9a0c",
+  "categories": ["business", "productivity", "finance"],
+  "icons": [
+    { "src": "assets/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "New invoice", "url": "./index.html#/sales/new", "icons": [{ "src": "assets/icon-192.png", "sizes": "192x192" }] },
+    { "name": "Log harvest", "url": "./index.html#/harvests?new=1", "icons": [{ "src": "assets/icon-192.png", "sizes": "192x192" }] }
+  ]
+}
