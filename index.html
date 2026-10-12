@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Oval Farms ERP</title>
+<meta name="description" content="Oval Farms ERP: production, stock, sales, purchases, staff and accounts for Oval Farms, with data shared through Google Drive.">
+<meta name="theme-color" content="#1f9a0c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Oval ERP">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="assets/favicon-64.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/app.css">
+<script>
+  // Apply the saved theme before first paint to avoid a flash.
+  try { var t = localStorage.getItem("ovalerp_theme"); if (t && t !== "system") document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+</script>
+<script src="config.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+</head>
+<body>
+  <div id="splash" class="splash" aria-label="Oval Farms ERP is loading">
+    <div class="splash-inner">
+      <div class="splash-logo-wrap"><img src="assets/logo.png" alt="Oval Farmtech" class="splash-logo"></div>
+      <h1 class="splash-title">Oval Farms <span>ERP</span></h1>
+      <p class="splash-tag">Health for those who matter</p>
+      <div class="splash-bar"><span></span></div>
+    </div>
+  </div>
+  <div id="app"></div>
+  <noscript>Oval Farms ERP needs JavaScript enabled.</noscript>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

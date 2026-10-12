@@ -1,0 +1,195 @@
+// Generic list + form screens driven by schema.js.
+import { store } from "../store.js";
+import { schemas, list } from "../schema.js";
+import { can } from "../session.js";
+import { esc, money, num, sum, today, addDays, inRange, monthStart, toCSV, downloadFile, fmtDate } from "../util.js";
+import { icon } from "../icons.js";
+import { openModal, toast, confirmDialog, fieldHtml, defaultsFor, readFields, validate, table, pageHead, refLabel, chip } from "../ui.js";
+import * as calc from "../calc.js";
+
+const state = {};
+
+// Per-collection behaviour that the schema alone can't express.
+const hooks = {
+  customers: { decorate: (r) => ({ ...r, _balance: calc.customerBalance(r.id) }) },
+  suppliers: { decorate: (r) => ({ ...r, _balance: calc.supplierBalance(r.id) }) },
+  batches: {
+    decorate: (r) => ({ ...r, _harvested: calc.harvestedKg(r.id), _be: calc.biologicalEfficiency(r) }),
+    defaults: () => ({ code: calc.nextNumber("batches", "B"), expectedHarvestDate: addDays(today(), 21) }),
+    formExtra: (r) => {
+      if (!r.id) return "";
+      const hs = store.all("harvests").filter((h) => h.batchId === r.id).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+      const kg = sum(hs, (h) => h.qty);
+      const be = calc.biologicalEfficiency(r);
+      return `<div class="form-extra">
+        <div class="mini-stats"><div><b>${kg.toFixed(2)} kg</b><span>harvested</span></div><div><b>${hs.length}</b><span>pickings</span></div><div><b>${be == null ? "–" : be.toFixed(0) + "%"}</b><span>bio. efficiency</span></div></div>
+        ${hs.length ? `<div class="mini-list">${hs.slice(0, 8).map((h) => `<div><span>${fmtDate(h.date)}</span><span>${Number(h.qty).toFixed(2)} kg · ${esc(h.grade || "")}</span></div>`).join("")}</div>` : ""}
+      </div>`;
+    },
+  },
+  harvests: {
+    defaults: () => {
+      const active = store.all("batches").filter((b) => b.status === "Harvesting" || b.status === "Fruiting");
+      return active.length === 1 ? { batchId: active[0].id } : {};
+    },
+    afterSave: (rec) => {
+      const b = store.get("batches", rec.batchId);
+      if (b && (b.status === "Fruiting" || b.status === "Incubation" || b.status === "Spawning")) store.put("batches", { id: b.id, status: "Harvesting" });
+    },
+  },
+  payments: {
+    decorate: (r) => {
+      const p = r.direction === "out" ? store.get("suppliers", r.supplierId) : store.get("customers", r.customerId);
+      return { ...r, _party: p ? p.name : "" };
+    },
+  },
+  tasks: {
+    afterSave: (rec, prev) => {
+      if (rec.status !== "Done" || !prev || prev.status === "Done" || !rec.repeat || rec.repeat === "No") return;
+      const step = { Daily: 1, Weekly: 7, Monthly: 30 }[rec.repeat] || 0;
+      const { id, createdAt, createdBy, updatedAt, updatedBy, ...rest } = rec;
+      store.put("tasks", { ...rest, status: "Open", dueDate: addDays(rec.dueDate || today(), step) });
+      toast("Next " + rec.repeat.toLowerCase() + " task created");
+    },
+  },
+};
+
+// Payment form: list the open invoices/bills of the chosen party.
+schemas.payments.fields.find((f) => f.k === "refId").docOptions = (r) => {
+  if (r.direction === "out") {
+    return store.all("purchases").filter((p) => calc.purchaseCounts(p) && (!r.supplierId || p.supplierId === r.supplierId) && (calc.docBalance(p) > 0 || p.id === r.refId))
+      .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+      .map((p) => ({ v: p.id, l: `${p.number} · ${fmtDate(p.date)} · due ${money(calc.docBalance(p))}` }));
+  }
+  return store.all("sales").filter((s) => calc.saleCounts(s) && (!r.customerId || s.customerId === r.customerId) && (calc.docBalance(s) > 0 || s.id === r.refId))
+    .sort((a, b) => (b.date || "").localeCompare(a.date || ""))
+    .map((s) => ({ v: s.id, l: `${s.number} · ${fmtDate(s.date)} · due ${money(calc.docBalance(s))}` }));
+};
+
+export function hooksAfterTask(rec, prev) { hooks.tasks.afterSave(rec, prev); }
+
+export function openForm(key, rec = null, { presets = {}, onSaved } = {}) {
+  const sc = schemas[key];
+  const h = hooks[key] || {};
+  const isNew = !rec;
+  const prev = rec ? { ...rec } : null;
+  let data = rec ? { ...rec } : { ...defaultsFor(sc.fields), ...(h.defaults ? h.defaults() : {}), ...presets };
+  const readOnly = !can("write");
+  const body = () => `<form class="form-grid" novalidate ${readOnly ? 'inert' : ""}>${sc.fields.map((f) => fieldHtml(f, data[f.k], data)).join("")}</form>${h.formExtra ? h.formExtra(data) : ""}`;
+  const actions = [];
+  if (!isNew && can("delete")) actions.push({ label: "Delete", cls: "btn-ghost btn-danger-text", icon: "trash", onClick: async ({ close }) => {
+    if (await confirmDialog(`Delete this ${sc.singular.toLowerCase()}? This removes it for everyone.`, { danger: true, okLabel: "Delete" })) {
+      store.remove(key, rec.id);
+      toast(sc.singular + " deleted");
+      return false;
+    }
+    return true;
+  } });
+  actions.push({ label: readOnly ? "Close" : "Cancel", cls: "btn-ghost" });
+  if (!readOnly) actions.push({ label: isNew ? "Save" : "Save changes", cls: "btn-primary", icon: "tick", onClick: ({ el }) => {
+    const form = el.querySelector("form");
+    const vals = readFields(form, sc.fields);
+    const merged = { ...data, ...vals };
+    for (const f of sc.fields) if (f.showIf && !f.showIf(merged)) merged[f.k] = "";
+    if (!validate(form, sc.fields, merged)) return true;
+    const saved = store.put(key, merged);
+    if (h.afterSave) h.afterSave(saved, prev);
+    toast(sc.singular + (isNew ? " added" : " saved"));
+    if (onSaved) onSaved(saved);
+    return false;
+  } });
+
+  openModal({
+    title: (isNew ? "New " : readOnly ? "" : "Edit ") + sc.singular.toLowerCase().replace(/^./, (c) => c.toUpperCase()),
+    body: body(),
+    actions,
+    onMount: ({ el }) => {
+      const form = el.querySelector("form");
+      form.addEventListener("submit", (e) => e.preventDefault());
+      form.addEventListener("change", (e) => {
+        e.target.classList && e.target.classList.remove("invalid");
+        const vals = { ...data, ...readFields(form, sc.fields) };
+        for (const f of sc.fields) {
+          const wrap = form.querySelector(`[data-k="${f.k}"]`);
+          if (f.showIf && wrap) wrap.classList.toggle("hidden", !f.showIf(vals));
+          if (f.type === "docref" && e.target.name !== f.k && wrap) {
+            wrap.outerHTML = fieldHtml(f, vals[f.k], vals);
+          }
+        }
+        // Payments: pre-fill the amount with what is still due on the chosen invoice/bill.
+        if (key === "payments" && e.target.name === "refId" && e.target.value) {
+          const doc = store.get(vals.direction === "out" ? "purchases" : "sales", e.target.value);
+          const amt = form.querySelector('[name="amount"]');
+          if (doc && amt && !amt.value) amt.value = calc.docBalance(doc);
+        }
+      });
+    },
+  });
+}
+
+export function listView(key, opts = {}) {
+  return {
+    title: schemas[key].title,
+    render(root) {
+      const sc = schemas[key];
+      const h = hooks[key] || {};
+      const st = state[key] || (state[key] = { q: "", filter: "", from: "", to: "" });
+      let rows = store.all(key);
+      if (h.decorate) rows = rows.map(h.decorate);
+      if (st.q) {
+        const q = st.q.toLowerCase();
+        rows = rows.filter((r) => (sc.search || []).some((k) => String(r[k] || "").toLowerCase().includes(q)) || (r._party || "").toLowerCase().includes(q));
+      }
+      const f = sc.filters && sc.filters[0];
+      if (f && st.filter) rows = rows.filter((r) => String(r[f.k]) === st.filter);
+      if (sc.dateKey && (st.from || st.to)) rows = rows.filter((r) => inRange(r[sc.dateKey], st.from, st.to));
+      rows.sort(sc.sort);
+
+      const options = f ? (f.options || list(f.list)).map((o) => (typeof o === "object" ? o : { v: o, l: o })) : [];
+
+      const totalHtml = sc.total ? `<div class="list-total">Total <b>${money(sum(rows, (r) => r[sc.total]))}</b> · ${rows.length} entries</div>` : `<div class="list-total muted">${rows.length} ${rows.length === 1 ? "entry" : "entries"}</div>`;
+
+      root.innerHTML = `
+        ${pageHead(sc.title, opts.subtitle || "", `
+          <button class="btn btn-ghost hide-sm" data-export>${icon("download")}Export</button>
+          ${can("write") ? `<button class="btn btn-primary new-btn" data-new>${icon("plus")}New ${esc(sc.singular.toLowerCase())}</button>` : ""}`)}
+        ${opts.banner ? opts.banner() : ""}
+        <div class="toolbar">
+          <div class="search">${icon("search")}<input type="search" placeholder="Search ${esc(sc.title.toLowerCase())}…" value="${esc(st.q)}" data-q></div>
+          ${f ? `<select data-filter><option value="">All</option>${options.map((o) => `<option value="${esc(o.v)}" ${String(o.v) === st.filter ? "selected" : ""}>${esc(o.l)}</option>`).join("")}</select>` : ""}
+          ${sc.dateKey ? `<div class="range"><input type="date" value="${esc(st.from)}" data-from aria-label="From"><span>–</span><input type="date" value="${esc(st.to)}" data-to aria-label="To"></div>
+            <div class="seg"><button data-preset="month" class="${st.from === monthStart() && st.to === "" ? "on" : ""}">This month</button><button data-preset="all" class="${!st.from && !st.to ? "on" : ""}">All</button></div>` : ""}
+        </div>
+        <div class="card card-flush">${table(sc.columns, rows, { rowAttr: (r) => `data-id="${r.id}" class="clickable"`, empty: `No ${sc.title.toLowerCase()} yet.` })}</div>
+        ${totalHtml}
+        ${can("write") ? `<button class="fab" data-new aria-label="New ${esc(sc.singular)}">${icon("plus")}</button>` : ""}`;
+
+      const rerender = () => this.render(root);
+      root.querySelector("[data-q]").addEventListener("input", (e) => {
+        st.q = e.target.value;
+        const pos = e.target.selectionStart;
+        rerender();
+        const inp = root.querySelector("[data-q]"); inp.focus(); inp.setSelectionRange(pos, pos);
+      });
+      const fs = root.querySelector("[data-filter]");
+      if (fs) fs.addEventListener("change", (e) => { st.filter = e.target.value; rerender(); });
+      const fr = root.querySelector("[data-from]"), to = root.querySelector("[data-to]");
+      if (fr) fr.addEventListener("change", (e) => { st.from = e.target.value; rerender(); });
+      if (to) to.addEventListener("change", (e) => { st.to = e.target.value; rerender(); });
+      root.querySelectorAll("[data-preset]").forEach((b) => b.addEventListener("click", () => {
+        if (b.dataset.preset === "month") { st.from = monthStart(); st.to = ""; } else { st.from = ""; st.to = ""; }
+        rerender();
+      }));
+      root.querySelectorAll("[data-new]").forEach((b) => b.addEventListener("click", () => openForm(key)));
+      root.querySelectorAll("tr[data-id]").forEach((tr) => tr.addEventListener("click", () => openForm(key, store.get(key, tr.dataset.id))));
+      root.querySelector("[data-export]").addEventListener("click", () => {
+        const cols = sc.fields.filter((x) => x.type !== "textarea" || x.k === "notes");
+        const csv = toCSV(cols.map((c) => c.label), rows.map((r) => cols.map((c) => {
+          if (c.type === "ref") return refLabel(c, store.get(c.ref, r[c.k]));
+          return r[c.k];
+        })));
+        downloadFile(`${key}-${today()}.csv`, csv, "text/csv");
+      });
+    },
+  };
+}
