@@ -14,7 +14,7 @@ app folder, while the ERP keeps one shared data file in a normal Drive folder so
 ## 1. Publish the app (GitHub Pages)
 
 1. Open the repository on GitHub → **Settings → Pages**.
-2. Under **Build and deployment**, choose **Deploy from a branch**, branch **main**, folder **/ (root)**, then **Save**.
+2. Under **Build and deployment**, choose **Deploy from a branch**, branch **RemoteMain** (the default branch), folder **/ (root)**, then **Save**.
 3. After a minute the app is live at **https://midhunvijayvs.github.io/oval-farms-erp-app/**.
 
 ## 2. Google Cloud settings (one time)
