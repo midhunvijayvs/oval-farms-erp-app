@@ -7,8 +7,8 @@ window.OVAL_CONFIG = {
   GOOGLE_CLIENT_ID: "69145806484-62td7dt2gb0sgtndr0am45kd0fenqc25.apps.googleusercontent.com",
 
   // ID of the shared "Oval Farms ERP" folder in the Oval Farms Google Drive.
-  // Leave empty to let each person paste the folder link (or open an invite link) on first sign-in.
-  DEFAULT_FOLDER_ID: "",
+  // Owned by ovaleggfarm@gmail.com. Leave empty to let each person paste the folder link on first sign-in.
+  DEFAULT_FOLDER_ID: "10N6cEH7CcGT2XcVECXYxFk2M5OJVSDcO",
 
   // Name of the data file kept inside that folder.
   DATA_FILE_NAME: "oval-farms-erp-data.json",
