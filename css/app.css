@@ -470,3 +470,8 @@ body.modal-open { overflow: hidden; }
   .paper { border: 0; box-shadow: none; padding: 0; }
   .card { box-shadow: none; break-inside: avoid; }
 }
+
+/* Online orders (Firebase) */
+.block { display: block; }
+.order-totals { padding: 12px 18px 16px; margin-left: auto; max-width: 340px; border-top: 1px solid var(--border); }
+.nav-badge { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--warn); color: #fff; font-size: 11.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }

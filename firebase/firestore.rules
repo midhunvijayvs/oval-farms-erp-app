@@ -1,0 +1,101 @@
+rules_version = '2';
+
+// Oval Farms Firestore security rules.
+// Paste this whole file into Firebase console > Firestore Database > Rules, then click Publish.
+//
+// Who is who:
+//   - Owners: the business Google account(s) below. Always allowed in as Admin.
+//   - Staff: anyone with a document in staff/{their email}. The ERP copies its Team list here.
+//   - Customers: anyone signed in on ovalfarm.in. They only see their own profile and orders.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function myEmail() { return request.auth.token.email; }
+    function verified() { return signedIn() && request.auth.token.email != null && request.auth.token.email_verified == true; }
+
+    function isOwner() { return verified() && myEmail() in ['ovaleggfarm@gmail.com']; }
+    function staffPath() { return /databases/$(database)/documents/staff/$(myEmail()); }
+    function staffRole() { return get(staffPath()).data.role; }
+    function isStaff() { return isOwner() || (verified() && exists(staffPath())); }
+    function canWrite() { return isOwner() || (isStaff() && staffRole() in ['admin', 'manager', 'staff']); }
+    function isAdmin() { return isOwner() || (isStaff() && staffRole() == 'admin'); }
+
+    function str(v, max) { return v is string && v.size() <= max; }
+    function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
+
+    // ---------- ERP team ----------
+    match /staff/{email} {
+      allow read: if isStaff() || (verified() && myEmail() == email);
+      allow create, update: if isAdmin()
+        && request.resource.data.role in ['admin', 'manager', 'staff', 'viewer']
+        && request.resource.data.email == email;
+      allow delete: if isAdmin();
+    }
+
+    // ---------- Customers (one document per website account, id = Firebase uid) ----------
+    function customerFieldsOk(d) {
+      return d.keys().hasOnly(['name', 'phone', 'email', 'addresses', 'marketing', 'source', 'createdAt', 'updatedAt'])
+        && str(d.name, 100)
+        && (!('phone' in d) || str(d.phone, 20))
+        && (!('email' in d) || str(d.email, 200))
+        && (!('addresses' in d) || (d.addresses is list && d.addresses.size() <= 10))
+        && (!('marketing' in d) || d.marketing is bool)
+        && d.updatedAt == request.time;
+    }
+
+    match /customers/{uid} {
+      allow read: if (signedIn() && request.auth.uid == uid) || isStaff();
+      allow create: if (signedIn() && request.auth.uid == uid
+                         && customerFieldsOk(request.resource.data)
+                         && request.resource.data.createdAt == request.time
+                         && request.resource.data.source == 'website')
+                    || canWrite();
+      allow update: if (signedIn() && request.auth.uid == uid
+                         && changed().hasOnly(['name', 'phone', 'email', 'addresses', 'marketing', 'updatedAt'])
+                         && customerFieldsOk(request.resource.data))
+                    || canWrite();
+      allow delete: if isAdmin();
+    }
+
+    // ---------- Orders placed on ovalfarm.in ----------
+    function orderItemsOk(items) {
+      return items is list && items.size() >= 1 && items.size() <= 50;
+    }
+
+    function newOrderOk(d) {
+      return d.keys().hasAll(['customerUid', 'customer', 'address', 'items', 'total', 'status', 'createdAt', 'updatedAt'])
+        && d.keys().hasOnly(['customerUid', 'customer', 'address', 'items', 'itemCount', 'subtotal', 'deliveryCharge', 'total',
+                             'note', 'payment', 'status', 'source', 'createdAt', 'updatedAt'])
+        && d.customerUid == request.auth.uid
+        && d.customer is map && str(d.customer.name, 100)
+        && d.address is map
+        && orderItemsOk(d.items)
+        && d.total is number && d.total >= 0
+        && (!('note' in d) || str(d.note, 500))
+        && d.status == 'placed'
+        && d.createdAt == request.time
+        && d.updatedAt == request.time;
+    }
+
+    match /orders/{orderId} {
+      allow read: if (signedIn() && resource.data.customerUid == request.auth.uid) || isStaff();
+      allow create: if signedIn() && newOrderOk(request.resource.data);
+      // Staff move orders through their statuses. A customer may only cancel an order nobody has confirmed yet.
+      allow update: if (canWrite()
+                         && request.resource.data.customerUid == resource.data.customerUid
+                         && request.resource.data.createdAt == resource.data.createdAt)
+                    || (signedIn() && resource.data.customerUid == request.auth.uid
+                         && resource.data.status == 'placed'
+                         && request.resource.data.status == 'cancelled'
+                         && changed().hasOnly(['status', 'updatedAt'])
+                         && request.resource.data.updatedAt == request.time);
+      allow delete: if isAdmin();
+    }
+
+    // Everything else is closed until a module needs it.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
