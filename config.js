@@ -14,5 +14,10 @@ window.OVAL_CONFIG = {
   DATA_FILE_NAME: "oval-farms-erp-data.json",
 
   // How often (seconds) the app checks Drive for changes made by other users.
-  SYNC_INTERVAL_SECONDS: 30
+  SYNC_INTERVAL_SECONDS: 30,
+
+  // Firebase web app config (Firebase console > Project settings > Your apps > Web app).
+  // Shared with ovalfarm.in. Powers Online Orders and Website Customers. Leave null until Firebase is set up.
+  // It is not a secret: the Firestore rules in firebase/firestore.rules protect the data.
+  FIREBASE: null
 };

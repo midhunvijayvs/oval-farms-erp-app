@@ -7,7 +7,9 @@ import { schemas } from "./schema.js";
 import { icon } from "./icons.js";
 import { esc, relTime } from "./util.js";
 import { toast } from "./ui.js";
-import { route, startRouter, render as renderRoute, navigate } from "./router.js";
+import { route, startRouter, render as renderRoute, navigate, currentPath } from "./router.js";
+import * as firebase from "./firebase.js";
+import { ordersView, orderDetailView, webCustomersView } from "./views/orders.js";
 import { listView, openForm } from "./views/crud.js";
 import { dashboardView } from "./views/dashboard.js";
 import { docList, docEditor, docView } from "./views/docs.js";
@@ -18,7 +20,7 @@ import { reportsView } from "./views/reports.js";
 import { settingsView, applyTheme } from "./views/settings.js";
 import { seedDemo } from "./seed.js";
 
-window.OVAL_VERSION = "1.0.2";
+window.OVAL_VERSION = "1.1.0";
 const cfg = window.OVAL_CONFIG || {};
 const LS = {
   get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },
@@ -42,8 +44,10 @@ const NAV = [
     { href: "#/adjustments", label: "Adjustments", ic: "sliders" },
   ] },
   { section: "Sales", items: [
+    { href: "#/orders", label: "Online Orders", ic: "cart", badge: "orders" },
     { href: "#/sales", label: "Invoices", ic: "file" },
     { href: "#/customers", label: "Customers", ic: "users" },
+    { href: "#/web-customers", label: "Website Customers", ic: "link" },
   ] },
   { section: "Purchases", perm: "finance", items: [
     { href: "#/purchases", label: "Purchase Bills", ic: "bag" },
@@ -99,6 +103,9 @@ function setupRoutes() {
     route(`/${kind}/:id/edit`, docEditor(kind), { allow });
     route(`/${kind}/:id`, docView(kind), { allow });
   }
+  route("/orders", ordersView);
+  route("/orders/:id", orderDetailView);
+  route("/web-customers", webCustomersView);
   route("/reports", reportsView, { allow: () => can("reports") });
   route("/settings", settingsView);
 }
@@ -118,7 +125,7 @@ function authScreen(inner) {
       <h1>Oval Farms ERP</h1>
       ${inner}
     </div>
-    <p class="auth-foot">Your data stays in the Oval Farms Google Drive.</p>
+    <p class="auth-foot">Your data stays in the Oval Farms Google Drive and Firebase.</p>
   </div>`;
 }
 
@@ -211,7 +218,8 @@ async function connectFolder(folderId) {
   LS.set("ovalerp_folder", folderId);
   await store.open(folderId, session.user);
   mountShell();
-  startDrive(folderId).then(() => { if (syncState.status === "idle") registerUser(); });
+  startDrive(folderId).then(() => { if (syncState.status === "idle") registerUser(); firebase.mirrorTeam(); });
+  firebase.connect();
 }
 
 async function enterDemo() {
@@ -222,11 +230,13 @@ async function enterDemo() {
   if (!store.all("items").length) seedDemo();
   await startDemo();
   mountShell();
+  firebase.connect();
 }
 
 async function signOut() {
   await store.flush();
   stopSync();
+  await firebase.disconnect();
   drive.signOut();
   LS.del("ovalerp_mode");
   session.user = null;
@@ -248,7 +258,7 @@ let shellMounted = false;
 function navHtml() {
   return NAV.filter((g) => !g.perm || can(g.perm)).map((g) => `
     ${g.section ? `<div class="nav-section">${g.section}</div>` : ""}
-    ${g.items.map((i) => `<a href="${i.href}" class="nav-link" data-nav="${i.href}">${icon(i.ic)}<span>${i.label}</span></a>`).join("")}`).join("");
+    ${g.items.map((i) => `<a href="${i.href}" class="nav-link" data-nav="${i.href}">${icon(i.ic)}<span>${i.label}</span>${i.badge ? `<b class="nav-badge" data-badge="${i.badge}" hidden></b>` : ""}</a>`).join("")}`).join("");
 }
 
 function mountShell() {
@@ -321,11 +331,30 @@ function mountShell() {
         lastRole = role;
         document.getElementById("nav").innerHTML = navHtml();
         document.getElementById("meRole").textContent = ROLES[role].label;
+        drawBadges();
       }
       renderRoute(true);
     });
   });
+  store.on((meta) => { if (meta && meta.collection === "users") firebase.mirrorTeam(); });
+  firebase.onFirebase(onFirebaseChange);
+  drawBadges();
   onSync(drawPill);
+}
+
+// Website orders arrive live from Firebase: refresh the badge, tell people, redraw the order pages.
+function drawBadges() {
+  const n = firebase.fb.orders.filter((o) => o.status === "placed").length;
+  document.querySelectorAll('[data-badge="orders"]').forEach((b) => { b.hidden = !n; b.textContent = n > 99 ? "99+" : String(n); });
+}
+
+function onFirebaseChange(what) {
+  drawBadges();
+  if (what && what.fresh) for (const o of what.fresh.slice(0, 3)) toast(`New online order from ${(o.customer && o.customer.name) || "a customer"}`);
+  const p = currentPath();
+  const onOrders = p.startsWith("/orders") || p === "/web-customers";
+  const typing = document.activeElement && document.activeElement.matches && document.activeElement.matches("#view textarea, #view input");
+  if (onOrders && !typing) renderRoute(true);
 }
 
 function drawPill(s) {

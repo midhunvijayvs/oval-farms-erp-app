@@ -43,6 +43,7 @@ export const schemas = {
       { k: "reorderLevel", label: "Low stock alert at", type: "number", half: true },
       { k: "openingStock", label: "Opening stock", type: "number", half: true },
       { k: "shelfLifeDays", label: "Shelf life (days)", type: "number", half: true },
+      { k: "webProductId", label: "Website product ID", type: "text", half: true, placeholder: "Links ovalfarm.in orders to this item" },
       { k: "active", label: "Active", type: "checkbox", default: true },
       { k: "notes", label: "Notes", type: "textarea" },
     ],

@@ -1,12 +1,12 @@
 // Service worker: caches the app shell so Oval Farms ERP opens instantly and works offline.
-// Business data is not cached here; it lives in Google Drive (and IndexedDB on each device).
-const VERSION = "oval-erp-v1.0.2";
+// Business data is not cached here; it lives in Google Drive and Firebase (and IndexedDB on each device).
+const VERSION = "oval-erp-v1.1.0";
 const SHELL = [
   "./", "./index.html", "./manifest.webmanifest", "./config.js", "./css/app.css",
   "./assets/logo.png", "./assets/icon-192.png", "./assets/icon-512.png", "./assets/icon-maskable-512.png", "./assets/apple-touch-icon.png", "./assets/favicon-64.png",
-  "./js/app.js", "./js/calc.js", "./js/drive.js", "./js/icons.js", "./js/idb.js", "./js/merge.js", "./js/router.js", "./js/schema.js",
+  "./js/app.js", "./js/calc.js", "./js/drive.js", "./js/firebase.js", "./js/icons.js", "./js/idb.js", "./js/merge.js", "./js/router.js", "./js/schema.js",
   "./js/seed.js", "./js/session.js", "./js/store.js", "./js/sync.js", "./js/ui.js", "./js/util.js",
-  "./js/views/attendance.js", "./js/views/charts.js", "./js/views/crud.js", "./js/views/dashboard.js", "./js/views/docs.js",
+  "./js/views/attendance.js", "./js/views/charts.js", "./js/views/crud.js", "./js/views/dashboard.js", "./js/views/docs.js", "./js/views/orders.js",
   "./js/views/production.js", "./js/views/reports.js", "./js/views/settings.js", "./js/views/stock.js",
 ];
 
@@ -24,7 +24,7 @@ self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
-  // Google sign-in, Drive API and fonts always go to the network.
+  // Google sign-in, Drive API, Firebase and fonts always go to the network.
   if (url.origin !== self.location.origin) return;
   // Network first (so updates show up straight away), cache as the offline fallback.
   event.respondWith(

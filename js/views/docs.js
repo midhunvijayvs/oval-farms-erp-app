@@ -8,6 +8,8 @@ import { toast, confirmDialog, pageHead, chip, emptyState, stat } from "../ui.js
 import * as calc from "../calc.js";
 import { openForm } from "./crud.js";
 import { navigate } from "../router.js";
+import { takeOrderDraft, clearOrderDraft } from "./orders.js";
+import { updateOrder } from "../firebase.js";
 
 export const DOCS = {
   sales: {
@@ -98,9 +100,11 @@ export function docEditor(kind) {
       if (!can("write")) { navigate(`#/${D.route}` + (params.id ? "/" + params.id : "")); return; }
       const party = store.all(D.partyCol).sort((a, b) => a.name.localeCompare(b.name));
       const items = store.all("items").filter((i) => i.active !== false).sort((a, b) => a.name.localeCompare(b.name));
+      const fromOrder = !existing && kind === "sales" && params.query && params.query.order ? takeOrderDraft(params.query.order) : null;
       const doc = existing ? JSON.parse(JSON.stringify(existing)) : {
         number: calc.nextNumber(D.col, D.prefix()), date: today(), status: D.defaultStatus, lines: [{ qty: 1 }], shipping: "",
         [D.partyKey]: params.party || "",
+        ...(fromOrder || {}),
       };
       if (!doc.lines || !doc.lines.length) doc.lines = [{ qty: 1 }];
       const stockNow = calc.stockMap();
@@ -221,6 +225,11 @@ export function docEditor(kind) {
           for (const l of doc.lines) for (const k of ["qty", "rate", "discount"]) if (l[k] !== "" && l[k] != null) l[k] = Number(l[k]);
           const saved = store.put(D.col, doc);
           toast(D.singular + " saved");
+          if (fromOrder && !existing) {
+            clearOrderDraft();
+            updateOrder(fromOrder.orderId, { invoiceId: saved.id, invoiceNumber: saved.number })
+              .catch((e) => toast("Invoice saved, but it couldn't be linked to the online order: " + e.message, "error"));
+          }
           navigate(`#/${D.route}/${saved.id}`, true);
         });
       };

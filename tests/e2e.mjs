@@ -1,10 +1,16 @@
 // End-to-end: two users share one (fake) Google Drive folder.
 // Run: python -m http.server 8765 &  then  node tests/e2e.mjs  (needs: npm i -g playwright)
+// With Firebase (online orders): npm i firebase@12.19.0, then
+//   FIREBASE_E2E=1 firebase emulators:exec --only auth,firestore --project demo-oval "node tests/e2e.mjs"
 import { chromium } from "playwright";
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+const FB = process.env.FIREBASE_E2E === "1";
 const OUT = process.argv[2] || ".";
 const BASE = "http://localhost:8765/index.html";
 const files = {}; let nextId = 1;
-const users = { tokA: { email: "owner@ovalfarms.in", name: "Oval Owner" }, tokB: { email: "staff@gmail.com", name: "Staff Person" } };
+const OWNER = FB ? "ovaleggfarm@gmail.com" : "owner@ovalfarms.in"; // Firestore rules make ovaleggfarm the owner
+const users = { tokA: { email: OWNER, name: "Oval Owner" }, tokB: { email: "staff@gmail.com", name: "Staff Person" } };
 const log = (...a) => console.log(...a);
 let fail = 0;
 const check = (cond, msg) => { log((cond ? "PASS " : "FAIL ") + msg); if (!cond) fail++; };
@@ -53,11 +59,25 @@ const fakeGis = (token) => `
     initTokenClient: (cfg) => ({ requestAccessToken: () => setTimeout(() => cfg.callback({ access_token: "${token}", expires_in: 3600 }), 20) }),
     hasGrantedAllScopes: () => true, revoke: (t, cb) => cb && cb() } } };`;
 
+const FB_CONFIG = { apiKey: "fake-key", authDomain: "demo-oval.firebaseapp.com", projectId: "demo-oval", appId: "1:1:web:1" };
+const SDK_DIR = FB ? createRequire(process.cwd() + "/").resolve("firebase/package.json").replace(/package\.json$/, "") : "";
+
 const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {});
 async function newUser(token, vp = { width: 1280, height: 860 }) {
   const ctx = await browser.newContext({ viewport: vp });
   await ctx.route("https://accounts.google.com/**", (r) => r.fulfill({ status: 200, contentType: "text/javascript", body: "" }));
   await ctx.route("https://www.googleapis.com/**", handle);
+  // Use the fake Drive's folder rather than the real one in config.js.
+  await ctx.route("**/config.js", async (r) => {
+    let body = (await (await r.fetch()).text()).replace(/DEFAULT_FOLDER_ID: "[^"]*"/, 'DEFAULT_FOLDER_ID: ""');
+    if (FB) body += `\nwindow.OVAL_CONFIG.FIREBASE = ${JSON.stringify(FB_CONFIG)};\nwindow.OVAL_CONFIG.FIREBASE_EMULATORS = { auth: "http://127.0.0.1:9099", host: "127.0.0.1", firestorePort: 8080 };`;
+    r.fulfill({ status: 200, contentType: "text/javascript", body });
+  });
+  // Serve the Firebase SDK from node_modules instead of Google's CDN.
+  if (FB) await ctx.route("https://www.gstatic.com/firebasejs/**", (r) => {
+    const file = new URL(r.request().url()).pathname.split("/").pop();
+    r.fulfill({ status: 200, contentType: "text/javascript", body: readFileSync(SDK_DIR + "/" + file) });
+  });
   await ctx.addInitScript(fakeGis(token));
   const page = await ctx.newPage();
   page.errors = [];
@@ -78,7 +98,7 @@ await A.waitForTimeout(2500);
 const folderId = Object.values(files).find((f) => f.mimeType.includes("folder")).id;
 const dataFile = () => Object.values(files).find((f) => f.name === "oval-farms-erp-data.json");
 check(!!dataFile(), "data file created in the shared folder");
-check(JSON.parse(dataFile().content).collections.users["owner@ovalfarms.in"].role === "admin", "first user registered as admin");
+check(JSON.parse(dataFile().content).collections.users[OWNER].role === "admin", "first user registered as admin");
 
 // Owner adds an item via the form
 await A.goto(BASE + "#/items?new=1");
@@ -190,6 +210,64 @@ await A.waitForTimeout(300);
 const st2 = await A.textContent("#view");
 check(/Dried Oyster 100 g[\s\S]*?5/.test(st2), "production added 5 packs");
 await A.screenshot({ path: OUT + "/e2e-owner-stock.png", fullPage: true });
+
+// ---- Online orders through Firebase (emulators) ----
+if (FB) {
+  const req = createRequire(process.cwd() + "/");
+  const { initializeApp } = await import(req.resolve("firebase/app"));
+  const au = await import(req.resolve("firebase/auth"));
+  const fs = await import(req.resolve("firebase/firestore"));
+  const capp = initializeApp(FB_CONFIG, "customer");
+  const cauth = au.getAuth(capp);
+  au.connectAuthEmulator(cauth, "http://127.0.0.1:9099", { disableWarnings: true });
+  const cdb = fs.getFirestore(capp);
+  fs.connectFirestoreEmulator(cdb, "127.0.0.1", 8080);
+  // A customer signs up with email and password on the website and places an order.
+  const cred = await au.createUserWithEmailAndPassword(cauth, "asha@example.com", "secret123");
+  const uid = cred.user.uid;
+  await fs.setDoc(fs.doc(cdb, "customers", uid), { name: "Asha Thomas", phone: "+91 98950 12345", email: "asha@example.com", addresses: [], source: "website", createdAt: fs.serverTimestamp(), updatedAt: fs.serverTimestamp() });
+  const ref = await fs.addDoc(fs.collection(cdb, "orders"), {
+    customerUid: uid, customer: { name: "Asha Thomas", phone: "+91 98950 12345", email: "asha@example.com" },
+    address: { line1: "Rose Villa, Market Road", city: "Kottayam", pincode: "686001" },
+    items: [{ productId: "5", name: "Oyster Mushroom (Fresh)", qty: 2, unit: "kg", price: 280 }], itemCount: 2, subtotal: 560, deliveryCharge: 0, total: 560,
+    payment: "cod", note: "", status: "placed", source: "website", createdAt: fs.serverTimestamp(), updatedAt: fs.serverTimestamp(),
+  });
+  // The owner sees it live, and the team list has been copied into Firebase.
+  await A.goto(BASE + "#/orders");
+  await A.waitForSelector(`tr[data-id="${ref.id}"]`, { timeout: 15000 });
+  check((await A.textContent("#view")).includes("Asha Thomas"), "owner sees the website order");
+  check((await A.textContent('[data-badge="orders"]')) === "1", "owner's nav badge counts the new order");
+  // A second order arrives while the owner is looking: it shows up without a reload.
+  const ref2 = await fs.addDoc(fs.collection(cdb, "orders"), { ...(await fs.getDoc(ref)).data(), createdAt: fs.serverTimestamp(), updatedAt: fs.serverTimestamp() });
+  await A.waitForSelector(`tr[data-id="${ref2.id}"]`, { timeout: 15000 });
+  check(true, "second order appears live");
+  await A.screenshot({ path: OUT + "/e2e-online-orders.png", fullPage: true });
+  // Staff: copied across by the owner's ERP, so staff can see orders too.
+  await A.click("#syncPill");
+  await A.waitForTimeout(2500);
+  await B.goto(BASE + "#/orders");
+  await B.waitForTimeout(1500);
+  if (await B.$("[data-retry]")) { await B.click("[data-retry]"); }
+  await B.waitForSelector(`tr[data-id="${ref.id}"]`, { timeout: 15000 });
+  check(true, "staff sees website orders after the owner's ERP copied the team list");
+  await B.goto(BASE + "#/orders/" + ref.id);
+  await B.waitForSelector("[data-next]");
+  await B.click("[data-next]");
+  await B.waitForTimeout(1500);
+  check((await fs.getDoc(ref)).data().status === "confirmed", "staff confirmed the order and the customer's copy says confirmed");
+  // Staff makes the invoice from the order: the item matches by name.
+  await B.click("[data-invoice]");
+  await B.waitForSelector(".line [data-f=itemId]");
+  check((await B.$eval(".line [data-f=itemId]", (x) => x.value)) !== "", "website item matched to the ERP product");
+  await B.click("[data-save]");
+  await B.waitForSelector(".paper");
+  await B.waitForTimeout(1500);
+  check(/^INV/.test((await fs.getDoc(ref)).data().invoiceNumber || ""), "order linked to its invoice in Firebase");
+  // The customer can't touch it any more.
+  let blocked = false;
+  try { await fs.updateDoc(ref, { status: "cancelled", updatedAt: fs.serverTimestamp() }); } catch (e) { blocked = e.code === "permission-denied"; }
+  check(blocked, "customer can't cancel an order after it's confirmed");
+}
 
 log("errors A:", JSON.stringify(A.errors), "errors B:", JSON.stringify(B.errors));
 log(fail ? `${fail} FAILED` : "ALL PASSED");

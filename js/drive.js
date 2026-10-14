@@ -69,6 +69,12 @@ export async function requestToken({ interactive = false, hint = "" } = {}) {
   });
 }
 
+// The current Google access token, so Firebase can sign in with the same Google account (no second popup).
+export async function freshToken() {
+  if (!hasToken()) await requestToken({ interactive: false, hint: localStorage.getItem("ovalerp_hint") || "" });
+  return accessToken;
+}
+
 export function hasToken() {
   return !!accessToken && Date.now() < expiresAt - 60000;
 }
