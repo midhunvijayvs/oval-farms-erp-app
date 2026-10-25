@@ -6,12 +6,16 @@ import { esc, money, num, sum, today, addDays, inRange, monthStart, toCSV, downl
 import { icon } from "../icons.js";
 import { openModal, toast, confirmDialog, fieldHtml, defaultsFor, readFields, validate, table, pageHead, refLabel, chip } from "../ui.js";
 import * as calc from "../calc.js";
+import { productHooks } from "./products.js";
+import { customerHooks } from "./customers.js";
+import { uploadProductImage } from "../firebase.js";
 
 const state = {};
 
 // Per-collection behaviour that the schema alone can't express.
 const hooks = {
-  customers: { decorate: (r) => ({ ...r, _balance: calc.customerBalance(r.id) }) },
+  products: productHooks,
+  customers: customerHooks,
   suppliers: { decorate: (r) => ({ ...r, _balance: calc.supplierBalance(r.id) }) },
   batches: {
     decorate: (r) => ({ ...r, _harvested: calc.harvestedKg(r.id), _be: calc.biologicalEfficiency(r) }),
@@ -86,14 +90,21 @@ export function openForm(key, rec = null, { presets = {}, onSaved } = {}) {
     return true;
   } });
   actions.push({ label: readOnly ? "Close" : "Cancel", cls: "btn-ghost" });
-  if (!readOnly) actions.push({ label: isNew ? "Save" : "Save changes", cls: "btn-primary", icon: "tick", onClick: ({ el }) => {
+  if (!readOnly) actions.push({ label: isNew ? "Save" : "Save changes", cls: "btn-primary", icon: "tick", onClick: async ({ el }) => {
     const form = el.querySelector("form");
     const vals = readFields(form, sc.fields);
-    const merged = { ...data, ...vals };
-    for (const f of sc.fields) if (f.showIf && !f.showIf(merged)) merged[f.k] = "";
+    let merged = { ...data, ...vals };
+    // Hidden fields are cleared, except ones marked keepWhenHidden (website details of an unpublished product).
+    for (const f of sc.fields) if (f.showIf && !f.showIf(merged) && !f.keepWhenHidden && !f.virtual) merged[f.k] = "";
     if (!validate(form, sc.fields, merged)) return true;
+    const extra = {};
+    for (const f of sc.fields) if (f.virtual) { extra[f.k] = merged[f.k]; delete merged[f.k]; }
+    if (h.beforeSave) {
+      merged = await h.beforeSave(merged, { isNew, extra, prev });
+      if (!merged) return true;
+    }
     const saved = store.put(key, merged);
-    if (h.afterSave) h.afterSave(saved, prev);
+    if (h.afterSave) h.afterSave(saved, prev, extra);
     toast(sc.singular + (isNew ? " added" : " saved"));
     if (onSaved) onSaved(saved);
     return false;
@@ -103,14 +114,16 @@ export function openForm(key, rec = null, { presets = {}, onSaved } = {}) {
     title: (isNew ? "New " : readOnly ? "" : "Edit ") + sc.singular.toLowerCase().replace(/^./, (c) => c.toUpperCase()),
     body: body(),
     actions,
-    onMount: ({ el }) => {
+    onMount: ({ el, close }) => {
       const form = el.querySelector("form");
       form.addEventListener("submit", (e) => e.preventDefault());
+      for (const f of sc.fields) if (f.type === "images") bindImages(form, f, data.id || "new");
+      if (h.formMount) h.formMount({ el, rec: data, close });
       form.addEventListener("change", (e) => {
         e.target.classList && e.target.classList.remove("invalid");
         const vals = { ...data, ...readFields(form, sc.fields) };
         for (const f of sc.fields) {
-          const wrap = form.querySelector(`[data-k="${f.k}"]`);
+          const wrap = form.querySelector(`[data-k="${f.k}"]`) || (f.type === "images" ? form.querySelector(`[data-images="${f.k}"]`)?.closest(".field") : null);
           if (f.showIf && wrap) wrap.classList.toggle("hidden", !f.showIf(vals));
           if (f.type === "docref" && e.target.name !== f.k && wrap) {
             wrap.outerHTML = fieldHtml(f, vals[f.k], vals);
@@ -151,9 +164,10 @@ export function listView(key, opts = {}) {
 
       root.innerHTML = `
         ${pageHead(sc.title, opts.subtitle || "", `
+          ${h.listActions ? h.listActions() : ""}
           <button class="btn btn-ghost hide-sm" data-export>${icon("download")}Export</button>
           ${can("write") ? `<button class="btn btn-primary new-btn" data-new>${icon("plus")}New ${esc(sc.singular.toLowerCase())}</button>` : ""}`)}
-        ${opts.banner ? opts.banner() : ""}
+        ${opts.banner ? opts.banner() : ""}${h.banner ? h.banner() : ""}
         <div class="toolbar">
           <div class="search">${icon("search")}<input type="search" placeholder="Search ${esc(sc.title.toLowerCase())}…" value="${esc(st.q)}" data-q></div>
           ${f ? `<select data-filter><option value="">All</option>${options.map((o) => `<option value="${esc(o.v)}" ${String(o.v) === st.filter ? "selected" : ""}>${esc(o.l)}</option>`).join("")}</select>` : ""}
@@ -181,6 +195,7 @@ export function listView(key, opts = {}) {
         rerender();
       }));
       root.querySelectorAll("[data-new]").forEach((b) => b.addEventListener("click", () => openForm(key)));
+      if (h.listMount) h.listMount(root, rerender);
       root.querySelectorAll("tr[data-id]").forEach((tr) => tr.addEventListener("click", () => openForm(key, store.get(key, tr.dataset.id))));
       root.querySelector("[data-export]").addEventListener("click", () => {
         const cols = sc.fields.filter((x) => x.type !== "textarea" || x.k === "notes");
@@ -192,4 +207,40 @@ export function listView(key, opts = {}) {
       });
     },
   };
+}
+
+// Photo list on the product form: upload (resized, to Firebase Storage), paste a link, reorder, remove.
+function bindImages(form, f, ownerId) {
+  const box = form.querySelector(`[data-images="${f.k}"]`);
+  if (!box) return;
+  const input = box.querySelector(`input[name="${f.k}"]`);
+  const msg = box.querySelector("[data-img-msg]");
+  const get = () => { try { return JSON.parse(input.value || "[]"); } catch (e) { return []; } };
+  const set = (urls) => {
+    input.value = JSON.stringify(urls);
+    const html = fieldHtml(f, urls, {});
+    const tmp = document.createElement("div");
+    tmp.innerHTML = html;
+    box.querySelector(".img-list").innerHTML = tmp.querySelector(".img-list").innerHTML;
+  };
+  box.addEventListener("click", (e) => {
+    const del = e.target.closest("[data-img-del]");
+    const first = e.target.closest("[data-img-first]");
+    if (del) { const u = get(); u.splice(+del.dataset.imgDel, 1); set(u); }
+    if (first) { const u = get(); const [x] = u.splice(+first.dataset.imgFirst, 1); u.unshift(x); set(u); }
+    if (e.target.closest("[data-img-url]")) {
+      const url = (prompt("Paste the picture's web address (starting with https://)") || "").trim();
+      if (/^https:\/\/\S+$/.test(url)) set([...get(), url]);
+      else if (url) toast("That doesn't look like a web address", "error");
+    }
+  });
+  box.querySelector("[data-img-file]").addEventListener("change", async (e) => {
+    const files = [...e.target.files];
+    e.target.value = "";
+    for (const file of files) {
+      msg.textContent = `Uploading ${file.name}…`;
+      try { set([...get(), await uploadProductImage(file, ownerId)]); msg.textContent = ""; }
+      catch (err) { msg.textContent = ""; toast(err.message, "error"); break; }
+    }
+  });
 }

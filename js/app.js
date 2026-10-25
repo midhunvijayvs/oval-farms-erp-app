@@ -1,15 +1,14 @@
-// App entry: splash -> sign-in -> data folder -> shell with navigation and routes.
+// App entry: splash -> Google sign-in -> team check -> shell with navigation and routes.
 import { store } from "./store.js";
-import * as drive from "./drive.js";
-import { startDrive, startDemo, stop as stopSync, onSync, syncNow, syncState } from "./sync.js";
-import { session, can, registerUser, ROLES, currentRole, userKey } from "./session.js";
+import { googleToken } from "./google.js";
+import { session, can, touchStaff, ROLES, currentRole, userKey } from "./session.js";
 import { schemas } from "./schema.js";
 import { icon } from "./icons.js";
-import { esc, relTime } from "./util.js";
+import { esc } from "./util.js";
 import { toast } from "./ui.js";
 import { route, startRouter, render as renderRoute, navigate, currentPath } from "./router.js";
 import * as firebase from "./firebase.js";
-import { ordersView, orderDetailView, webCustomersView } from "./views/orders.js";
+import { ordersView, orderDetailView, orderEditor } from "./views/orders.js";
 import { listView, openForm } from "./views/crud.js";
 import { dashboardView } from "./views/dashboard.js";
 import { docList, docEditor, docView } from "./views/docs.js";
@@ -19,8 +18,9 @@ import { attendanceView } from "./views/attendance.js";
 import { reportsView } from "./views/reports.js";
 import { settingsView, applyTheme } from "./views/settings.js";
 import { seedDemo } from "./seed.js";
+import { seedWebsiteProducts } from "./seed-products.js";
 
-window.OVAL_VERSION = "1.1.0";
+window.OVAL_VERSION = "2.0.0";
 const cfg = window.OVAL_CONFIG || {};
 const LS = {
   get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },
@@ -40,14 +40,13 @@ const NAV = [
   ] },
   { section: "Inventory", items: [
     { href: "#/stock", label: "Stock", ic: "layers" },
-    { href: "#/items", label: "Products & Materials", ic: "box" },
+    { href: "#/products", label: "Products & Materials", ic: "box" },
     { href: "#/adjustments", label: "Adjustments", ic: "sliders" },
   ] },
   { section: "Sales", items: [
-    { href: "#/orders", label: "Online Orders", ic: "cart", badge: "orders" },
+    { href: "#/orders", label: "Orders", ic: "cart", badge: "orders" },
     { href: "#/sales", label: "Invoices", ic: "file" },
     { href: "#/customers", label: "Customers", ic: "users" },
-    { href: "#/web-customers", label: "Website Customers", ic: "link" },
   ] },
   { section: "Purchases", perm: "finance", items: [
     { href: "#/purchases", label: "Purchase Bills", ic: "bag" },
@@ -67,8 +66,8 @@ const NAV = [
 ];
 const BOTTOM = [
   { href: "#/dashboard", label: "Home", ic: "home" },
-  { href: "#/sales", label: "Sales", ic: "file" },
-  { href: "#/harvests", label: "Harvest", ic: "basket" },
+  { href: "#/orders", label: "Orders", ic: "cart" },
+  { href: "#/sales", label: "Invoices", ic: "file" },
   { href: "#/stock", label: "Stock", ic: "layers" },
 ];
 
@@ -88,7 +87,7 @@ function setupRoutes() {
     }, { allow });
   };
   route("/dashboard", dashboardView);
-  crud("batches"); crud("harvests"); crud("items"); crud("adjustments"); crud("customers");
+  crud("batches"); crud("harvests"); crud("products"); crud("adjustments"); crud("customers");
   crud("suppliers", fin); crud("expenses", fin); crud("payments", fin);
   crud("employees"); crud("tasks");
   route("/production", productionList);
@@ -104,8 +103,12 @@ function setupRoutes() {
     route(`/${kind}/:id`, docView(kind), { allow });
   }
   route("/orders", ordersView);
+  route("/orders/new", orderEditor);
+  route("/orders/:id/edit", orderEditor);
   route("/orders/:id", orderDetailView);
-  route("/web-customers", webCustomersView);
+  // Old addresses from before products and customers were merged.
+  route("/items", { title: "", render() { navigate("#/products", true); } });
+  route("/web-customers", { title: "", render() { navigate("#/customers", true); } });
   route("/reports", reportsView, { allow: () => can("reports") });
   route("/settings", settingsView);
 }
@@ -125,21 +128,22 @@ function authScreen(inner) {
       <h1>Oval Farms ERP</h1>
       ${inner}
     </div>
-    <p class="auth-foot">Your data stays in the Oval Farms Google Drive and Firebase.</p>
+    <p class="auth-foot">Your data is kept in the Oval Farms Firebase database, shared with ovalfarm.in.</p>
   </div>`;
 }
 
 function showLogin(message = "") {
   const hint = LS.get("ovalerp_hint");
   authScreen(`
-    <p class="muted">Production, stock, sales and accounts for Oval Farms, shared by the whole team.</p>
+    <p class="muted">Production, stock, orders, sales and accounts for Oval Farms, shared by the whole team.</p>
     ${message ? `<p class="auth-msg">${esc(message)}</p>` : ""}
-    <button class="btn btn-google" data-signin>${googleG()}<span>${hint ? "Continue as " + esc(hint) : "Sign in with Google"}</span></button>
-    ${hint ? `<button class="btn btn-link" data-other>Use a different Google account</button>` : ""}
+    ${firebase.configured() ? `<button class="btn btn-google" data-signin>${googleG()}<span>${hint ? "Continue as " + esc(hint) : "Sign in with Google"}</span></button>
+    ${hint ? `<button class="btn btn-link" data-other>Use a different Google account</button>` : ""}` : `<p class="auth-msg">Firebase isn't set up in config.js yet.</p>`}
     <div class="auth-or"><span>or</span></div>
     <button class="btn btn-ghost" data-demo>${icon("sprout")}Explore with sample data</button>
   `);
-  app.querySelector("[data-signin]").addEventListener("click", () => signIn(hint || ""));
+  const si = app.querySelector("[data-signin]");
+  if (si) si.addEventListener("click", () => signIn(hint || ""));
   const other = app.querySelector("[data-other]");
   if (other) other.addEventListener("click", () => { LS.del("ovalerp_hint"); signIn(""); });
   app.querySelector("[data-demo]").addEventListener("click", enterDemo);
@@ -153,73 +157,49 @@ async function signIn(hint) {
   const btn = app.querySelector("[data-signin]");
   if (btn) { btn.disabled = true; btn.querySelector("span").textContent = "Opening Google…"; }
   try {
-    await drive.requestToken({ interactive: true, hint });
-    await afterToken();
+    await firebase.init();
+    const token = cfg.FIREBASE_EMULATORS ? (cfg.FIREBASE_EMULATORS.signInAs || prompt("Test email")) : await googleToken(hint);
+    const user = await firebase.signInWithGoogleToken(token);
+    await afterSignIn(user);
   } catch (e) {
     showLogin(e.message === "Superseded" ? "" : e.message);
   }
 }
 
-async function afterToken() {
-  const info = await drive.userInfo();
-  session.user = { email: info.email, name: info.name || info.email, picture: info.picture || "" };
-  session.mode = "drive";
-  LS.set("ovalerp_hint", info.email);
-  LS.set("ovalerp_mode", "drive");
-  const folder = cfg.DEFAULT_FOLDER_ID || LS.get("ovalerp_folder");
-  if (folder) await connectFolder(folder);
-  else showFolderSetup();
+async function afterSignIn(user) {
+  session.user = { email: userKey(user.email), name: user.displayName || user.email, picture: user.photoURL || "" };
+  session.mode = "firebase";
+  LS.set("ovalerp_hint", session.user.email);
+  LS.set("ovalerp_mode", "firebase");
+  authScreen(`<div class="loader"></div><p class="muted">Opening Oval Farms data…</p>`);
+  let me;
+  try { me = await firebase.staffRecord(session.user.email); }
+  catch (e) { return showLogin("Couldn't reach the database: " + e.message); }
+  if (!me) return showNoAccess();
+  session.role = me.role;
+  await store.open("firebase", session.user, firebase.backend);
+  await firebase.startSync();
+  touchStaff();
+  if (can("admin") && !store.all("products").length) {
+    const n = seedWebsiteProducts();
+    if (n) toast(`Added the ${n} products from ovalfarm.in to Products & Materials`);
+  }
+  mountShell();
 }
 
-function showFolderSetup(error = "") {
+function showNoAccess() {
   authScreen(`
     <p class="muted">Signed in as <b>${esc(session.user.email)}</b></p>
-    ${error ? `<p class="auth-msg">${esc(error)}</p>` : ""}
-    <div class="field left"><label for="folderLink">Oval Farms data folder link</label>
-      <input id="folderLink" placeholder="https://drive.google.com/drive/folders/…" autocomplete="off"></div>
-    <button class="btn btn-primary btn-block" data-connect>${icon("folder")}Connect to shared data</button>
-    <p class="small muted left">Ask the Oval Farms admin for the folder link (or the invite link). The folder must be shared with ${esc(session.user.email)}.</p>
-    <div class="auth-or"><span>first time setup</span></div>
-    <button class="btn btn-ghost btn-block" data-create>${icon("plus")}Create the Oval Farms ERP folder in this Drive</button>
-    <p class="small muted left">Do this once, signed in with the Oval Farms Google account. You become the Admin and can then share the folder with your team.</p>
-    <button class="btn btn-link" data-signout>Sign out</button>
+    <p class="auth-msg">This Google account isn't on the Oval Farms team yet.</p>
+    <p class="small muted left">Ask the Oval Farms admin to add <b>${esc(session.user.email)}</b> under Settings → Team, then tap Try again.</p>
+    <button class="btn btn-primary btn-block" data-retry>${icon("refresh")}Try again</button>
+    <button class="btn btn-link" data-signout>Use a different Google account</button>
   `);
-  const inp = app.querySelector("#folderLink");
-  app.querySelector("[data-connect]").addEventListener("click", () => {
-    const id = drive.parseFolderId(inp.value);
-    if (!id) { inp.classList.add("invalid"); return toast("Paste the Google Drive folder link", "error"); }
-    connectFolder(id);
-  });
-  app.querySelector("[data-create]").addEventListener("click", async (e) => {
-    e.target.disabled = true;
-    try {
-      const f = await drive.createFolder("Oval Farms ERP");
-      toast("Folder created in your Google Drive");
-      await connectFolder(f.id);
-    } catch (err) { showFolderSetup(err.message); }
+  app.querySelector("[data-retry]").addEventListener("click", async () => {
+    const u = await firebase.currentUser();
+    if (u) afterSignIn(u); else showLogin();
   });
   app.querySelector("[data-signout]").addEventListener("click", signOut);
-}
-
-async function connectFolder(folderId) {
-  authScreen(`<div class="loader"></div><p class="muted">Opening Oval Farms data…</p>`);
-  try {
-    const f = await drive.getFile(folderId);
-    if (f.mimeType !== "application/vnd.google-apps.folder") return showFolderSetup("That link is a file, not a folder. Paste the link of the Oval Farms ERP folder.");
-    if (f.capabilities && f.capabilities.canAddChildren === false) toast("You have view-only access to this folder. Ask the admin for Editor access to make changes.", "error");
-  } catch (e) {
-    if (e instanceof drive.AuthError) return showLogin(e.message);
-    if (e.status === 404 || e.status === 403) {
-      LS.del("ovalerp_folder");
-      return showFolderSetup(`This Google account (${session.user.email}) can't open that folder. Ask the Oval Farms admin to share it with you as Editor.`);
-    }
-    // Network trouble: carry on with what's cached on this device.
-  }
-  LS.set("ovalerp_folder", folderId);
-  await store.open(folderId, session.user);
-  mountShell();
-  startDrive(folderId).then(() => { if (syncState.status === "idle") registerUser(); firebase.mirrorTeam(); });
-  firebase.connect();
 }
 
 async function enterDemo() {
@@ -227,30 +207,20 @@ async function enterDemo() {
   session.user = { email: "demo@ovalfarms.local", name: "Demo User", picture: "" };
   LS.set("ovalerp_mode", "demo");
   await store.open("demo", session.user);
-  if (!store.all("items").length) seedDemo();
-  await startDemo();
+  if (!store.all("products").length) seedDemo();
   mountShell();
-  firebase.connect();
 }
 
 async function signOut() {
   await store.flush();
-  stopSync();
-  await firebase.disconnect();
-  drive.signOut();
+  if (session.mode === "firebase") await firebase.signOut();
   LS.del("ovalerp_mode");
   session.user = null;
   location.hash = "";
   location.reload();
 }
 
-function switchFolder() {
-  stopSync();
-  LS.del("ovalerp_folder");
-  showFolderSetup();
-}
-
-session.actions = { signOut, switchFolder };
+session.actions = { signOut };
 
 // ---------------- shell ----------------
 let shellMounted = false;
@@ -321,7 +291,12 @@ function mountShell() {
 
   let lastRole = currentRole();
   let pending = 0;
-  store.on(() => {
+  let stale = false;
+  const typing = () => { const a = document.activeElement; return !!(a && a.closest && a.closest("#view") && a.matches("input, textarea, select")); };
+  // Changes from other people wait while someone is typing on the page, then the page redraws.
+  document.getElementById("view").addEventListener("focusout", () => setTimeout(() => { if (stale && !typing()) { stale = false; renderRoute(true); } }, 0));
+  store.on((meta) => {
+    if (meta && meta.type === "remote" && typing()) { stale = true; return; }
     if (pending) return;
     pending = requestAnimationFrame(() => {
       pending = 0;
@@ -336,53 +311,56 @@ function mountShell() {
       renderRoute(true);
     });
   });
-  store.on((meta) => { if (meta && meta.collection === "users") firebase.mirrorTeam(); });
   firebase.onFirebase(onFirebaseChange);
+  watchOrders();
   drawBadges();
-  onSync(drawPill);
+  drawPill();
 }
 
-// Website orders arrive live from Firebase: refresh the badge, tell people, redraw the order pages.
+// New orders from the website: badge on the menu and a message for whoever has the ERP open.
+let knownOrders = null;
+function watchOrders() {
+  knownOrders = new Set(store.all("orders").map((o) => o.id));
+  store.on((meta) => {
+    if (!meta || meta.collection !== "orders") return;
+    drawBadges();
+    if (meta.type !== "remote") { for (const o of store.all("orders")) knownOrders.add(o.id); return; }
+    const fresh = store.all("orders").filter((o) => !knownOrders.has(o.id));
+    for (const o of fresh) knownOrders.add(o.id);
+    for (const o of fresh.filter((x) => x.channel === "online" && x.status === "placed").slice(0, 3)) toast(`New online order from ${(o.customer && o.customer.name) || "a customer"}`);
+  });
+}
+
 function drawBadges() {
-  const n = firebase.fb.orders.filter((o) => o.status === "placed").length;
+  const n = store.all("orders").filter((o) => o.status === "placed").length;
   document.querySelectorAll('[data-badge="orders"]').forEach((b) => { b.hidden = !n; b.textContent = n > 99 ? "99+" : String(n); });
 }
 
 function onFirebaseChange(what) {
-  drawBadges();
-  if (what && what.fresh) for (const o of what.fresh.slice(0, 3)) toast(`New online order from ${(o.customer && o.customer.name) || "a customer"}`);
-  const p = currentPath();
-  const onOrders = p.startsWith("/orders") || p === "/web-customers";
-  const typing = document.activeElement && document.activeElement.matches && document.activeElement.matches("#view textarea, #view input");
-  if (onOrders && !typing) renderRoute(true);
+  if (what.type === "error") toast(what.message, "error");
+  drawPill();
 }
 
-function drawPill(s) {
+function drawPill() {
   const pill = document.getElementById("syncPill");
   if (!pill) return;
-  let cls = "ok", ic = "cloud", text = "Synced";
-  if (s.mode === "demo") { cls = "muted"; ic = "sprout"; text = "Demo data"; }
-  else if (s.status === "syncing") { cls = "busy"; ic = "refresh"; text = "Syncing…"; }
+  const s = firebase.fbState;
+  let cls = "ok", ic = "cloud", text = "Saved";
+  if (session.mode === "demo") { cls = "muted"; ic = "sprout"; text = "Demo data"; }
   else if (s.status === "offline") { cls = "warn"; ic = "cloudOff"; text = "Offline"; }
-  else if (s.status === "error") { cls = "danger"; ic = "alert"; text = "Sync problem"; }
-  else if (s.status === "auth") { cls = "danger"; ic = "refresh"; text = "Reconnect"; }
+  else if (s.status === "saving") { cls = "busy"; ic = "refresh"; text = "Saving…"; }
+  else if (s.status === "error") { cls = "danger"; ic = "alert"; text = "Problem"; }
   pill.className = "sync-pill " + cls;
   pill.innerHTML = icon(ic) + `<span>${text}</span>`;
-  pill.title = s.mode === "demo" ? "Demo mode: data is stored only in this browser" :
-    s.status === "offline" ? "You're offline. Changes are saved on this device and will sync when you're back online." :
-    s.error ? s.error : s.lastSync ? "Last synced " + relTime(s.lastSync) : "";
+  pill.title = session.mode === "demo" ? "Demo mode: data is stored only in this browser" :
+    s.status === "offline" ? "You're offline. Changes are kept on this device and saved when you're back online." :
+    s.status === "saving" ? "Saving your changes…" : s.error || "Everything is saved";
 }
 
-async function onPillClick() {
-  if (syncState.mode === "demo") return navigate("#/settings?tab=data");
-  if (syncState.status === "auth") {
-    try { await drive.requestToken({ interactive: true, hint: LS.get("ovalerp_hint") || "" }); await syncNow(); toast("Reconnected"); }
-    catch (e) { toast(e.message, "error"); }
-    return;
-  }
-  if (syncState.status === "error") toast(syncState.error || "Sync problem", "error");
-  await syncNow();
-  if (syncState.status === "idle") registerUser();
+function onPillClick() {
+  if (session.mode === "demo") return navigate("#/settings?tab=data");
+  const s = firebase.fbState;
+  toast(s.status === "offline" ? "You're offline. Changes will save when you're back online." : s.status === "saving" ? "Saving…" : s.error || "Everything is saved", s.error ? "error" : "ok");
 }
 
 // ---------------- boot ----------------
@@ -399,14 +377,6 @@ async function boot() {
     if (ib) ib.hidden = false;
   });
 
-  const params = new URLSearchParams(location.search);
-  const invite = params.get("folder");
-  if (invite) {
-    LS.set("ovalerp_folder", drive.parseFolderId(invite) || invite);
-    if (LS.get("ovalerp_mode") === "demo") LS.del("ovalerp_mode");
-    history.replaceState(null, "", location.pathname + location.hash);
-  }
-
   const minSplash = sleep(1500);
   const mode = LS.get("ovalerp_mode");
   if (mode === "demo") {
@@ -415,22 +385,21 @@ async function boot() {
     hideSplash();
     return;
   }
-  if (mode === "drive" && LS.get("ovalerp_hint")) {
-    // Try to restore the session quietly; fall back to the sign-in button.
-    const quiet = Promise.race([
-      drive.requestToken({ interactive: false, hint: LS.get("ovalerp_hint") }),
-      sleep(7000).then(() => { throw new Error("timeout"); }),
-    ]);
+  if (mode === "firebase" && firebase.configured()) {
+    // Firebase remembers who signed in on this device.
     try {
-      await quiet;
-      await minSplash;
-      hideSplash();
-      await afterToken();
-      return;
-    } catch (e) { /* show login */ }
+      await firebase.init();
+      const user = await Promise.race([firebase.currentUser(), sleep(8000).then(() => null)]);
+      if (user) {
+        await minSplash;
+        hideSplash();
+        await afterSignIn(user);
+        return;
+      }
+    } catch (e) { console.warn("Restoring the session failed", e); }
   }
   await minSplash;
-  showLogin(invite ? "You've been invited to Oval Farms ERP. Sign in with the Google account the folder was shared with." : "");
+  showLogin();
   hideSplash();
 }
 
@@ -438,4 +407,4 @@ window.addEventListener("pagehide", () => { store.flush(); });
 boot();
 
 // Expose for debugging in the browser console.
-window.__oval = { store, syncState, schemas, userKey };
+window.__oval = { store, schemas, userKey, firebase };

@@ -13,7 +13,7 @@ const st = { q: "", from: "", to: "" };
 export const productionList = {
   title: "Processing",
   render(root) {
-    const items = new Map(store.all("items").map((i) => [i.id, i]));
+    const items = new Map(store.all("products").map((i) => [i.id, i]));
     let rows = store.all("productions");
     if (st.q) {
       const q = st.q.toLowerCase();
@@ -61,7 +61,7 @@ export const productionEditor = {
     const existing = params.id && params.id !== "new" ? store.get("productions", params.id) : null;
     if (params.id && params.id !== "new" && !existing) { root.innerHTML = emptyState("This production run was not found."); return; }
     const readOnly = !can("write");
-    const items = store.all("items").filter((i) => i.active !== false).sort((a, b) => a.name.localeCompare(b.name));
+    const items = store.all("products").filter((i) => i.active !== false).sort((a, b) => a.name.localeCompare(b.name));
     const outputs = items.filter((i) => i.category !== "Raw Material" && i.category !== "Packaging" && i.category !== "Consumable");
     const run = existing ? JSON.parse(JSON.stringify(existing)) : { date: today(), lotNo: calc.nextNumber("productions", "LOT"), inputs: [{}], outputQty: "", otherCost: "" };
     if (!run.inputs || !run.inputs.length) run.inputs = [{}];

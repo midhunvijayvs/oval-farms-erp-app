@@ -1,9 +1,14 @@
 // Small shared helpers: ids, dates, formatting, escaping.
 
+// Random 20-character id, the same shape Firestore uses, so short numbers made from the first
+// characters (like order numbers) don't repeat.
+const ID_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
 export function uid(prefix = "") {
-  const t = Date.now().toString(36);
-  const r = Math.random().toString(36).slice(2, 8);
-  return prefix + t + r;
+  const bytes = new Uint8Array(20);
+  crypto.getRandomValues(bytes);
+  let out = "";
+  for (const b of bytes) out += ID_CHARS[b % ID_CHARS.length];
+  return prefix + out;
 }
 
 export function nowISO() {

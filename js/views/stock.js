@@ -27,7 +27,7 @@ function ledger(item) {
       </tbody></table></div>` : `<p class="muted">No stock movements yet.</p>`}`,
     actions: [
       ...(can("write") ? [
-        { label: "Edit item", cls: "btn-ghost", icon: "edit", onClick: () => { openForm("items", item); } },
+        { label: "Edit product", cls: "btn-ghost", icon: "edit", onClick: () => { openForm("products", item); } },
         { label: "Adjust stock", cls: "btn-primary", icon: "sliders", onClick: () => { openForm("adjustments", null, { presets: { itemId: item.id } }); } },
       ] : [{ label: "Close", cls: "btn-ghost" }]),
     ],
@@ -38,7 +38,7 @@ function ledger(item) {
 export const stockView = {
   title: "Stock",
   render(root) {
-    const all = store.all("items").filter((i) => i.active !== false);
+    const all = store.all("products").filter((i) => i.active !== false);
     let rows = all.map((i) => ({ ...i, _qty: calc.stockOf(i.id), _status: calc.stockStatus(i) }));
     if (st.q) { const q = st.q.toLowerCase(); rows = rows.filter((r) => r.name.toLowerCase().includes(q) || (r.sku || "").toLowerCase().includes(q)); }
     if (st.cat) rows = rows.filter((r) => r.category === st.cat);
@@ -51,7 +51,7 @@ export const stockView = {
     root.innerHTML = `
       ${pageHead("Stock", "Calculated live from harvests, production, purchases, sales and adjustments.", `
         <button class="btn btn-ghost hide-sm" data-export>${icon("download")}Export</button>
-        ${can("write") ? `<button class="btn btn-ghost" data-adjust>${icon("sliders")}Adjust stock</button><button class="btn btn-primary" data-new>${icon("plus")}New item</button>` : ""}`)}
+        ${can("write") ? `<button class="btn btn-ghost" data-adjust>${icon("sliders")}Adjust stock</button><button class="btn btn-primary" data-new>${icon("plus")}New product</button>` : ""}`)}
       <div class="stats stats-3">
         ${stat("Stock value (at cost)", money(value), { ic: "layers" })}
         ${stat("Stock value (at selling price)", money(saleValue), { ic: "trend" })}
@@ -63,9 +63,9 @@ export const stockView = {
         <div class="seg"><button data-only="" class="${!st.only ? "on" : ""}">All</button><button data-only="low" class="${st.only ? "on" : ""}">Needs attention</button></div>
       </div>
       <div class="card card-flush">
-        ${rows.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>Item</th><th>Category</th><th class="r">In stock</th><th class="r">Alert at</th><th class="r">Value</th><th>Status</th></tr></thead><tbody>
+        ${rows.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>Item</th><th>Category</th><th class="r">In stock</th><th class="r" title="Ordered but not invoiced yet">On order</th><th class="r">Alert at</th><th class="r">Value</th><th>Status</th></tr></thead><tbody>
           ${rows.map((r) => `<tr class="clickable" data-id="${r.id}"><td class="primary" data-label="Item">${esc(r.name)}</td><td data-label="Category">${esc(r.category || "")}</td>
-            <td class="r" data-label="In stock"><b>${num(r._qty)}</b> ${esc(r.unit || "")}</td><td class="r" data-label="Alert at">${r.reorderLevel !== "" && r.reorderLevel != null ? num(r.reorderLevel) : "–"}</td>
+            <td class="r" data-label="In stock"><b>${num(r._qty)}</b> ${esc(r.unit || "")}</td><td class="r" data-label="On order">${calc.reservedOf(r.id) ? num(calc.reservedOf(r.id)) : "–"}</td><td class="r" data-label="Alert at">${r.reorderLevel !== "" && r.reorderLevel != null ? num(r.reorderLevel) : "–"}</td>
             <td class="r" data-label="Value">${money(Math.max(0, r._qty) * (Number(r.costPrice) || 0))}</td><td data-label="Status">${chip(r._status)}</td></tr>`).join("")}
         </tbody></table></div>` : emptyState(all.length ? "No items match." : "Add your products, fresh mushrooms, raw materials and packaging to start tracking stock.", can("write") && !all.length ? `<button class="btn btn-primary" data-new>${icon("plus")}Add first item</button>` : "")}
       </div>`;
@@ -74,10 +74,10 @@ export const stockView = {
     root.querySelector("[data-q]").addEventListener("input", (e) => { st.q = e.target.value; const p = e.target.selectionStart; rr(); const i = root.querySelector("[data-q]"); i.focus(); i.setSelectionRange(p, p); });
     root.querySelector("[data-cat]").addEventListener("change", (e) => { st.cat = e.target.value; rr(); });
     root.querySelectorAll("[data-only]").forEach((b) => b.addEventListener("click", () => { st.only = b.dataset.only; rr(); }));
-    root.querySelectorAll("[data-new]").forEach((b) => b.addEventListener("click", () => openForm("items")));
+    root.querySelectorAll("[data-new]").forEach((b) => b.addEventListener("click", () => openForm("products")));
     const adj = root.querySelector("[data-adjust]");
     if (adj) adj.addEventListener("click", () => openForm("adjustments"));
-    root.querySelectorAll("tr[data-id]").forEach((tr) => tr.addEventListener("click", () => ledger(store.get("items", tr.dataset.id))));
+    root.querySelectorAll("tr[data-id]").forEach((tr) => tr.addEventListener("click", () => ledger(store.get("products", tr.dataset.id))));
     root.querySelector("[data-export]").addEventListener("click", () => {
       downloadFile(`stock-${today()}.csv`, toCSV(["Item", "SKU", "Category", "Unit", "In stock", "Cost price", "Value at cost", "Status"],
         rows.map((r) => [r.name, r.sku, r.category, r.unit, r._qty, r.costPrice, Math.max(0, r._qty) * (Number(r.costPrice) || 0), r._status])), "text/csv");
