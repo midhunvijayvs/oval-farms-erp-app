@@ -99,7 +99,7 @@ The ERP no longer uses Google Drive, so it only asks for name and email and publ
 1. **New database rules.** Firestore Database → **Rules** → replace everything with the contents of
    [`firebase/firestore.rules`](../firebase/firestore.rules) → **Publish**.
 2. **Product photos (Storage).** Needs the Blaze plan from step 3.
-   Build → **Storage** → **Get started** → location **asia-south1** → production mode → **Done**.
+   Build → **Storage** → **Get started** → **No cost location** (US-EAST1, includes 5 GB free) → production mode → **Create**.
    Then the **Rules** tab → replace everything with [`firebase/storage.rules`](../firebase/storage.rules) → **Publish**.
    Until this is done, photos can still be added in the ERP by pasting an image link.
 3. **Customer login email (optional).** Authentication → **Templates** → **Password reset** → edit the sender name to
