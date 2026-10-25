@@ -1,27 +1,31 @@
 rules_version = '2';
 
-// Oval Farms Firestore security rules.
+// Oval Farms Firestore security rules (ERP + ovalfarm.in).
 // Paste this whole file into Firebase console > Firestore Database > Rules, then click Publish.
 //
 // Who is who:
 //   - Owners: the business Google account(s) below. Always allowed in as Admin.
-//   - Staff: anyone with a document in staff/{their email}. The ERP copies its Team list here.
-//   - Customers: anyone signed in on ovalfarm.in. They only see their own profile and orders.
+//   - Staff: anyone with a document in staff/{their email} (Settings > Team in the ERP).
+//   - Customers: anyone signed in on ovalfarm.in. They see the public catalog, their own
+//     customer record and their own orders, nothing else.
 service cloud.firestore {
   match /databases/{database}/documents {
 
     function signedIn() { return request.auth != null; }
     function myEmail() { return request.auth.token.email; }
-    function verified() { return signedIn() && request.auth.token.email != null && request.auth.token.email_verified == true; }
+    function verified() { return signedIn() && ('email' in request.auth.token) && request.auth.token.email != null && request.auth.token.email_verified == true; }
+    function myPhone() { return signedIn() && ('phone_number' in request.auth.token) && request.auth.token.phone_number != null ? request.auth.token.phone_number : '-'; }
 
     function isOwner() { return verified() && myEmail() in ['ovaleggfarm@gmail.com']; }
     function staffPath() { return /databases/$(database)/documents/staff/$(myEmail()); }
     function staffRole() { return get(staffPath()).data.role; }
     function isStaff() { return isOwner() || (verified() && exists(staffPath())); }
     function canWrite() { return isOwner() || (isStaff() && staffRole() in ['admin', 'manager', 'staff']); }
+    function canDelete() { return isOwner() || (isStaff() && staffRole() in ['admin', 'manager']); }
     function isAdmin() { return isOwner() || (isStaff() && staffRole() == 'admin'); }
 
     function str(v, max) { return v is string && v.size() <= max; }
+    function optStr(d, k, max) { return !(k in d) || d[k] == null || str(d[k], max); }
     function changed() { return request.resource.data.diff(resource.data).affectedKeys(); }
 
     // ---------- ERP team ----------
@@ -30,44 +34,86 @@ service cloud.firestore {
       allow create, update: if isAdmin()
         && request.resource.data.role in ['admin', 'manager', 'staff', 'viewer']
         && request.resource.data.email == email;
+      // Everyone keeps their own name, photo and last-seen day up to date.
+      allow update: if isStaff() && myEmail() == email
+        && changed().hasOnly(['name', 'picture', 'lastSeen', 'updatedAt', 'updatedBy']);
       allow delete: if isAdmin();
     }
 
-    // ---------- Customers (one document per website account, id = Firebase uid) ----------
+    // ---------- Products ----------
+    // The full product list (cost prices, notes, materials) is for staff only.
+    match /products/{id} {
+      allow read: if isStaff();
+      allow create, update: if canWrite();
+      allow delete: if canDelete();
+    }
+    // The public copy of published products the ERP keeps for the website (js/catalog.js).
+    match /catalog/{id} {
+      allow read: if true;
+      allow write: if canWrite();
+    }
+
+    // ---------- Customers ----------
+    // One list for website sign-ups (channel 'online') and customers added in the ERP ('offline').
+    // uid is the customer's website login, or null when they don't have one yet.
+    function ownCustomer(d) { return signedIn() && d.uid == request.auth.uid; }
+    // An ERP customer without a login can be claimed by whoever signs in with the same verified
+    // email or the same phone number.
+    function claimable(d) {
+      return signedIn() && d.uid == null
+        && ((verified() && d.email == myEmail()) || (myPhone() != '-' && d.phoneE164 == myPhone()));
+    }
     function customerFieldsOk(d) {
-      return d.keys().hasOnly(['name', 'phone', 'email', 'addresses', 'marketing', 'source', 'createdAt', 'updatedAt'])
-        && str(d.name, 100)
-        && (!('phone' in d) || str(d.phone, 20))
-        && (!('email' in d) || str(d.email, 200))
+      return str(d.name, 100)
+        && optStr(d, 'phone', 20) && optStr(d, 'phoneE164', 16) && optStr(d, 'email', 200)
         && (!('addresses' in d) || (d.addresses is list && d.addresses.size() <= 10))
         && (!('marketing' in d) || d.marketing is bool)
         && d.updatedAt == request.time;
     }
 
-    match /customers/{uid} {
-      allow read: if (signedIn() && request.auth.uid == uid) || isStaff();
-      allow create: if (signedIn() && request.auth.uid == uid
+    match /customers/{id} {
+      allow read: if isStaff() || ownCustomer(resource.data) || claimable(resource.data);
+      allow create: if canWrite()
+                    || (signedIn() && id == request.auth.uid
+                         && request.resource.data.keys().hasOnly(['name', 'phone', 'phoneE164', 'email', 'addresses', 'marketing', 'channel', 'uid', 'accountStatus', 'lastLoginAt', 'createdAt', 'updatedAt'])
                          && customerFieldsOk(request.resource.data)
-                         && request.resource.data.createdAt == request.time
-                         && request.resource.data.source == 'website')
-                    || canWrite();
-      allow update: if (signedIn() && request.auth.uid == uid
-                         && changed().hasOnly(['name', 'phone', 'email', 'addresses', 'marketing', 'updatedAt'])
+                         && request.resource.data.uid == request.auth.uid
+                         && request.resource.data.channel == 'online'
+                         && request.resource.data.accountStatus == 'active'
+                         && request.resource.data.createdAt == request.time);
+      allow update: if canWrite()
+                    || (ownCustomer(resource.data)
+                         && changed().hasOnly(['name', 'phone', 'phoneE164', 'email', 'addresses', 'marketing', 'accountStatus', 'lastLoginAt', 'updatedAt'])
+                         && request.resource.data.uid == resource.data.uid
+                         && (!('accountStatus' in changed()) || request.resource.data.accountStatus == 'active')
                          && customerFieldsOk(request.resource.data))
-                    || canWrite();
+                    || (claimable(resource.data)
+                         && changed().hasOnly(['uid', 'accountStatus', 'lastLoginAt', 'updatedAt'])
+                         && request.resource.data.uid == request.auth.uid
+                         && request.resource.data.accountStatus == 'active'
+                         && request.resource.data.updatedAt == request.time);
       allow delete: if isAdmin();
     }
 
-    // ---------- Orders placed on ovalfarm.in ----------
+    // Temporary passwords of logins made in the ERP, so staff can pass them on.
+    match /customerInvites/{id} {
+      allow read: if isStaff();
+      allow write: if canWrite();
+    }
+
+    // ---------- Orders (website and ERP) ----------
     function orderItemsOk(items) {
       return items is list && items.size() >= 1 && items.size() <= 50;
     }
 
-    function newOrderOk(d) {
-      return d.keys().hasAll(['customerUid', 'customer', 'address', 'items', 'total', 'status', 'createdAt', 'updatedAt'])
-        && d.keys().hasOnly(['customerUid', 'customer', 'address', 'items', 'itemCount', 'subtotal', 'deliveryCharge', 'total',
-                             'note', 'payment', 'status', 'source', 'createdAt', 'updatedAt'])
+    // An order placed on ovalfarm.in by a signed-in customer, for their own customer record.
+    function newOnlineOrderOk(d) {
+      return d.keys().hasAll(['customerUid', 'customerId', 'customer', 'address', 'items', 'total', 'status', 'channel', 'createdAt', 'updatedAt'])
+        && d.keys().hasOnly(['customerUid', 'customerId', 'customer', 'address', 'items', 'itemCount', 'subtotal', 'deliveryCharge', 'total',
+                             'note', 'payment', 'status', 'channel', 'source', 'createdAt', 'updatedAt'])
         && d.customerUid == request.auth.uid
+        && get(/databases/$(database)/documents/customers/$(d.customerId)).data.uid == request.auth.uid
+        && d.channel == 'online'
         && d.customer is map && str(d.customer.name, 100)
         && d.address is map
         && orderItemsOk(d.items)
@@ -79,10 +125,13 @@ service cloud.firestore {
     }
 
     match /orders/{orderId} {
-      allow read: if (signedIn() && resource.data.customerUid == request.auth.uid) || isStaff();
-      allow create: if signedIn() && newOrderOk(request.resource.data);
-      // Staff move orders through their statuses. A customer may only cancel an order nobody has confirmed yet.
+      allow read: if isStaff() || (signedIn() && resource.data.customerUid == request.auth.uid);
+      allow create: if (canWrite() && request.resource.data.channel == 'offline' && orderItemsOk(request.resource.data.items))
+                    || (signedIn() && newOnlineOrderOk(request.resource.data));
+      // Staff move orders along and can correct them; where an order came from never changes.
+      // A customer may only cancel an order nobody has confirmed yet.
       allow update: if (canWrite()
+                         && request.resource.data.channel == resource.data.channel
                          && request.resource.data.customerUid == resource.data.customerUid
                          && request.resource.data.createdAt == resource.data.createdAt)
                     || (signedIn() && resource.data.customerUid == request.auth.uid
@@ -93,9 +142,18 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Everything else is closed until a module needs it.
-    match /{document=**} {
-      allow read, write: if false;
+    // ---------- ERP-only records ----------
+    match /{col}/{id} {
+      allow read: if isStaff() && col in ['settings', 'batches', 'harvests', 'productions', 'adjustments', 'sales', 'purchases',
+                                          'suppliers', 'expenses', 'payments', 'employees', 'attendance', 'tasks'];
+      allow create, update: if canWrite() && col in ['batches', 'harvests', 'productions', 'adjustments', 'sales', 'purchases',
+                                          'suppliers', 'expenses', 'payments', 'employees', 'attendance', 'tasks'];
+      allow delete: if canDelete() && col in ['batches', 'harvests', 'productions', 'adjustments', 'sales', 'purchases',
+                                          'suppliers', 'expenses', 'payments', 'employees', 'attendance', 'tasks'];
+    }
+    // Business profile and dropdown lists: admins and managers.
+    match /settings/{id} {
+      allow write: if canDelete();
     }
   }
 }

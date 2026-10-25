@@ -1,17 +1,19 @@
-// In-memory database with IndexedDB cache. Every write stamps the record with who/when
-// so the Drive sync (sync.js) can merge edits from several users record by record.
-import { emptyDb } from "./merge.js";
+// In-memory database the whole app reads from synchronously.
+// Signed in, it mirrors Firestore: listeners fill it (applyRemote) and every put/remove is
+// shown at once and written to Firestore by the backend (js/firebase.js), which also keeps
+// working offline. In demo mode there is no backend and the data is cached in IndexedDB.
 import { kvGet, kvSet } from "./idb.js";
 import { uid, nowISO } from "./util.js";
+
+const emptyDb = () => ({ schema: 2, collections: {} });
 
 let db = emptyDb();
 let namespace = null;
 let user = { email: "", name: "" };
+let backend = null;
 let revision = 0;
 const listeners = new Set();
 let saveTimer = null;
-
-function cacheKey() { return "db:" + namespace; }
 
 function emit(meta) {
   revision++;
@@ -21,15 +23,18 @@ function emit(meta) {
 }
 
 function persistSoon() {
+  if (backend) return;
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => kvSet(cacheKey(), db), 250);
+  saveTimer = setTimeout(() => kvSet("db:" + namespace, db), 250);
 }
 
 export const store = {
-  async open(ns, currentUser) {
+  // backend: { write(collection, id, patch, isNew), remove(collection, id) } or null for demo.
+  async open(ns, currentUser, withBackend = null) {
     namespace = ns;
     user = currentUser;
-    db = (await kvGet(cacheKey())) || emptyDb();
+    backend = withBackend;
+    db = backend ? emptyDb() : (await kvGet("db:" + ns)) || emptyDb();
     if (!db.collections) db = emptyDb();
     emit({ type: "open" });
   },
@@ -37,17 +42,9 @@ export const store = {
   get namespace() { return namespace; },
   get user() { return user; },
   get revision() { return revision; },
+  get online() { return !!backend; },
 
   snapshot() { return db; },
-
-  // Replace the whole db (after a merge with Drive). Does not count as a local edit.
-  // Replace the whole db. After a Drive merge this is not a local edit (nothing to upload);
-  // after restoring a backup it is (asLocal=true), so the sync pushes it to Drive.
-  replace(next, asLocal = false) {
-    db = next;
-    persistSoon();
-    emit({ type: asLocal ? "local" : "remote" });
-  },
 
   col(name) {
     if (!db.collections[name]) db.collections[name] = {};
@@ -59,21 +56,27 @@ export const store = {
   },
 
   get(name, id) {
+    if (!id) return null;
     const r = this.col(name)[id];
     return r && !r.deleted ? r : null;
   },
 
+  // Saves a whole record or a patch ({ id, field: value }). Returns the full record.
   put(name, rec) {
     const c = this.col(name);
     const ts = nowISO();
     const existing = rec.id ? c[rec.id] : null;
+    const isNew = !existing;
     const out = { ...(existing || {}), ...rec };
     if (!out.id) out.id = uid();
-    if (!existing) { out.createdAt = ts; out.createdBy = user.email; }
-    out.updatedAt = ts;
-    out.updatedBy = user.email;
+    const patch = { ...rec };
+    delete patch.id;
+    if (isNew) { out.createdAt = ts; out.createdBy = user.email; patch.createdAt = ts; patch.createdBy = user.email; }
+    out.updatedAt = ts; out.updatedBy = user.email;
+    patch.updatedAt = ts; patch.updatedBy = user.email;
     delete out.deleted;
     c[out.id] = out;
+    if (backend) backend.write(name, out.id, isNew ? { ...out, id: undefined } : patch, isNew);
     persistSoon();
     emit({ type: "local", collection: name, id: out.id });
     return out;
@@ -86,9 +89,20 @@ export const store = {
   remove(name, id) {
     const c = this.col(name);
     if (!c[id]) return;
-    c[id] = { id, deleted: true, updatedAt: nowISO(), updatedBy: user.email };
+    delete c[id];
+    if (backend) backend.remove(name, id);
     persistSoon();
     emit({ type: "local", collection: name, id });
+  },
+
+  // Firestore listener results for one collection: changes = [{ id, data | null }].
+  applyRemote(name, changes) {
+    const c = this.col(name);
+    for (const ch of changes) {
+      if (ch.data) c[ch.id] = { ...ch.data, id: ch.id };
+      else delete c[ch.id];
+    }
+    emit({ type: "remote", collection: name });
   },
 
   settings() {
@@ -98,7 +112,8 @@ export const store = {
   on(fn) { listeners.add(fn); return () => listeners.delete(fn); },
 
   async flush() {
+    if (backend) return;
     clearTimeout(saveTimer);
-    await kvSet(cacheKey(), db);
+    await kvSet("db:" + namespace, db);
   },
 };

@@ -34,7 +34,7 @@ export const dashboardView = {
     const overdueInv = sales.filter((s) => s.dueDate && s.dueDate < t && calc.docBalance(s) > 0.5);
     const recent = store.all("sales").sort((a, b) => (b.date || "").localeCompare(a.date || "") || (b.createdAt || "").localeCompare(a.createdAt || "")).slice(0, 6);
     const customers = new Map(store.all("customers").map((c) => [c.id, c]));
-    const items = new Map(store.all("items").map((i) => [i.id, i]));
+    const items = new Map(store.all("products").map((i) => [i.id, i]));
 
     // 14-day series
     const days = Array.from({ length: 14 }, (_, i) => addDays(t, i - 13));

@@ -41,7 +41,7 @@ export function movements() {
   return cached("movements", () => {
     const out = [];
     const batches = new Map(store.all("batches").map((b) => [b.id, b]));
-    for (const i of store.all("items")) {
+    for (const i of store.all("products")) {
       if (Number(i.openingStock)) out.push({ date: i.createdAt ? i.createdAt.slice(0, 10) : "", itemId: i.id, qty: Number(i.openingStock), type: "Opening stock", ref: "" });
     }
     for (const h of store.all("harvests")) {
@@ -83,6 +83,25 @@ function round3(n) { return Math.round(n * 1000) / 1000; }
 
 export function stockOf(itemId) { return stockMap().get(itemId) || 0; }
 
+// Orders that aren't cancelled and have no invoice yet: their items are promised but not yet out of stock.
+export const OPEN_ORDER = (o) => o.status !== "cancelled" && !o.invoiceId;
+
+export function reservedMap() {
+  return cached("reserved", () => {
+    const m = new Map();
+    for (const o of store.all("orders")) {
+      if (!OPEN_ORDER(o)) continue;
+      for (const li of o.items || []) if (li.productId) m.set(li.productId, round3((m.get(li.productId) || 0) + (Number(li.qty) || 0)));
+    }
+    return m;
+  });
+}
+
+export function reservedOf(itemId) { return reservedMap().get(itemId) || 0; }
+
+// Stock left after open orders: what the website can still sell.
+export function availableOf(itemId) { return round3(stockOf(itemId) - reservedOf(itemId)); }
+
 export function stockStatus(item) {
   const q = stockOf(item.id);
   if (q <= 0) return "Out of stock";
@@ -91,7 +110,7 @@ export function stockStatus(item) {
 }
 
 export function lowStockItems() {
-  return store.all("items").filter((i) => i.active !== false && i.reorderLevel !== "" && i.reorderLevel != null && stockOf(i.id) <= Number(i.reorderLevel));
+  return store.all("products").filter((i) => i.active !== false && i.reorderLevel !== "" && i.reorderLevel != null && stockOf(i.id) <= Number(i.reorderLevel));
 }
 
 export function harvestedKg(batchId) {
@@ -149,7 +168,7 @@ export function totalPayables() {
 }
 
 export function productionCost(run) {
-  const items = new Map(store.all("items").map((i) => [i.id, i]));
+  const items = new Map(store.all("products").map((i) => [i.id, i]));
   const material = sum(run.inputs || [], (inp) => (Number(inp.qty) || 0) * (Number((items.get(inp.itemId) || {}).costPrice) || 0));
   const total = material + (Number(run.otherCost) || 0);
   const qty = Number(run.outputQty) || 0;

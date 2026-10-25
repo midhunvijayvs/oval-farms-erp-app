@@ -91,7 +91,7 @@ function optionList(f) {
 export function refOptions(f, current) {
   let rows = store.all(f.ref);
   if (f.refFilter) rows = rows.filter((r) => f.refFilter(r) || r.id === current);
-  if (f.ref === "items" || f.ref === "employees") rows = rows.filter((r) => r.active !== false || r.id === current);
+  if (f.ref === "products" || f.ref === "employees") rows = rows.filter((r) => r.active !== false || r.id === current);
   rows.sort(f.refSort || ((a, b) => refLabel(f, a).localeCompare(refLabel(f, b))));
   return rows.map((r) => ({ v: r.id, l: refLabel(f, r) }));
 }
@@ -109,8 +109,29 @@ export function fieldHtml(f, value, rec = {}) {
   let input = "";
   if (value === undefined || value === null) value = "";
   switch (f.type) {
+    case "heading":
+      return `<h4 class="form-section ${hidden}" data-k="${f.k}">${esc(f.label)}</h4>`;
+    case "static":
+      input = `<div class="static-value">${esc(f.fmt ? f.fmt(value, rec) : value)}</div>`;
+      break;
+    case "lines":
+      input = `<textarea id="${id}" name="${f.k}" rows="3" placeholder="${esc(f.placeholder || "")}">${esc(Array.isArray(value) ? value.join("\n") : value)}</textarea>`;
+      break;
+    case "images": {
+      const urls = Array.isArray(value) ? value : [];
+      input = `<div class="img-field" data-images="${f.k}">
+        <input type="hidden" name="${f.k}" value="${esc(JSON.stringify(urls))}">
+        <div class="img-list">${urls.map((u, i) => `<figure class="img-thumb"><img src="${esc(u)}" alt="" loading="lazy"><button type="button" class="icon-btn" data-img-del="${i}" aria-label="Remove photo">${icon("x")}</button>${i ? `<button type="button" class="img-main" data-img-first="${i}">Make main</button>` : `<span class="img-main on">Main</span>`}</figure>`).join("")}</div>
+        <div class="img-actions">
+          <label class="btn btn-ghost">${icon("upload")}Upload photo<input type="file" accept="image/*" multiple hidden data-img-file></label>
+          <button type="button" class="btn btn-link" data-img-url>Paste a picture link</button>
+        </div>
+        <small class="muted" data-img-msg></small>
+      </div>`;
+      break;
+    }
     case "textarea":
-      input = `<textarea id="${id}" name="${f.k}" rows="2" placeholder="${esc(f.placeholder || "")}">${esc(value)}</textarea>`;
+      input = `<textarea id="${id}" name="${f.k}" rows="${f.rows || 2}" placeholder="${esc(f.placeholder || "")}">${esc(value)}</textarea>`;
       break;
     case "select": {
       const opts = optionList(f);
@@ -154,6 +175,8 @@ export function readFields(root, fields) {
     const el = root.querySelector(`[name="${f.k}"]`);
     if (!el) continue;
     if (f.type === "checkbox") out[f.k] = el.checked;
+    else if (f.type === "images") { try { out[f.k] = JSON.parse(el.value || "[]"); } catch (e) { out[f.k] = []; } }
+    else if (f.type === "lines") out[f.k] = el.value.split("\n").map((x) => x.trim()).filter(Boolean);
     else if (f.type === "number" || f.type === "money") out[f.k] = el.value === "" ? "" : Number(el.value);
     else out[f.k] = el.value.trim();
   }
@@ -182,6 +205,8 @@ const STATUS_TONE = {
   "Partly paid": "warn", Low: "warn", Draft: "muted", "Half day": "warn", Leave: "muted", High: "danger",
   Unpaid: "danger", Cancelled: "muted", "Out of stock": "danger", "Contaminated / Discarded": "danger", Left: "muted", Absent: "danger",
   Received_: "ok", "Paid out": "warn",
+  "On website": "ok", "Low stock": "warn", "Not listed": "muted", Online: "info", Offline: "muted",
+  Invited: "warn", Registered: "ok", "No login": "muted",
 };
 
 export function chip(text, tone) {

@@ -1,24 +1,18 @@
-// Oval Farms ERP configuration.
-// Edit these values to point the app at your own Google Cloud project and shared Drive folder.
-// See docs/SETUP.md for the step-by-step guide.
+// Oval Farms ERP configuration. See docs/FIREBASE.md for the console steps.
 window.OVAL_CONFIG = {
   // OAuth 2.0 Web client ID from Google Cloud Console (APIs & Services > Credentials).
-  // "Oval Farms ERP" project owned by ovaleggfarm@gmail.com.
+  // "Oval Farms ERP" project owned by ovaleggfarm@gmail.com. Used only for the Google sign-in button.
   GOOGLE_CLIENT_ID: "69145806484-62td7dt2gb0sgtndr0am45kd0fenqc25.apps.googleusercontent.com",
 
-  // ID of the shared "Oval Farms ERP" folder in the Oval Farms Google Drive.
-  // Owned by ovaleggfarm@gmail.com. Leave empty to let each person paste the folder link on first sign-in.
-  DEFAULT_FOLDER_ID: "10N6cEH7CcGT2XcVECXYxFk2M5OJVSDcO",
+  // Always Admin, even before anyone is on the team. Must match isOwner() in firebase/firestore.rules.
+  OWNER_EMAILS: ["ovaleggfarm@gmail.com"],
 
-  // Name of the data file kept inside that folder.
-  DATA_FILE_NAME: "oval-farms-erp-data.json",
-
-  // How often (seconds) the app checks Drive for changes made by other users.
-  SYNC_INTERVAL_SECONDS: 30,
+  // The public website. Customer login links point here.
+  SHOP_URL: "https://ovalfarm.in",
 
   // Firebase web app config (Firebase console > Project settings > Your apps > Web app).
-  // Shared with ovalfarm.in. Powers Online Orders and Website Customers.
-  // It is not a secret: the Firestore rules in firebase/firestore.rules protect the data.
+  // Shared with ovalfarm.in: the ERP's database, logins and product photos.
+  // It is not a secret: the rules in firebase/firestore.rules and firebase/storage.rules protect the data.
   FIREBASE: {
     apiKey: "AIzaSyDIyU5niDKZC0rCWdb6N4a254LcC6dX1rc",
     authDomain: "oval-farms-erp.firebaseapp.com",

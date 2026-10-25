@@ -1,0 +1,23 @@
+rules_version = '2';
+
+// Oval Farms Storage rules: product photos.
+// Paste into Firebase console > Storage > Rules, then click Publish.
+// Anyone can view product photos (they're shown on ovalfarm.in); only ERP team members who can
+// edit (Settings > Team: Admin, Manager or Staff) can upload or delete them.
+service firebase.storage {
+  match /b/{bucket}/o {
+    function canWrite() {
+      return request.auth != null && request.auth.token.email_verified == true
+        && (request.auth.token.email in ['ovaleggfarm@gmail.com']
+            || firestore.get(/databases/(default)/documents/staff/$(request.auth.token.email)).data.role in ['admin', 'manager', 'staff']);
+    }
+
+    match /products/{productId}/{file} {
+      allow read: if true;
+      allow create, update: if canWrite()
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if canWrite();
+    }
+  }
+}

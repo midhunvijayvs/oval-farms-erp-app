@@ -8,8 +8,7 @@ import { toast, confirmDialog, pageHead, chip, emptyState, stat } from "../ui.js
 import * as calc from "../calc.js";
 import { openForm } from "./crud.js";
 import { navigate } from "../router.js";
-import { takeOrderDraft, clearOrderDraft } from "./orders.js";
-import { updateOrder } from "../firebase.js";
+import { orderNo, addressText } from "./orders.js";
 
 export const DOCS = {
   sales: {
@@ -99,13 +98,35 @@ export function docEditor(kind) {
       if (params.id && !existing) { root.innerHTML = emptyState("This document was not found. It may have been deleted."); return; }
       if (!can("write")) { navigate(`#/${D.route}` + (params.id ? "/" + params.id : "")); return; }
       const party = store.all(D.partyCol).sort((a, b) => a.name.localeCompare(b.name));
-      const items = store.all("items").filter((i) => i.active !== false).sort((a, b) => a.name.localeCompare(b.name));
-      const fromOrder = !existing && kind === "sales" && params.query && params.query.order ? takeOrderDraft(params.query.order) : null;
+      const items = store.all("products").filter((i) => i.active !== false).sort((a, b) => a.name.localeCompare(b.name));
+      const isSale = kind === "sales";
       const doc = existing ? JSON.parse(JSON.stringify(existing)) : {
         number: calc.nextNumber(D.col, D.prefix()), date: today(), status: D.defaultStatus, lines: [{ qty: 1 }], shipping: "",
         [D.partyKey]: params.party || "",
-        ...(fromOrder || {}),
       };
+      const prevOrderId = existing ? existing.orderId || "" : "";
+      // Every sales invoice is made from an order: the order fills in the customer, items and delivery.
+      const orderChoices = () => store.all("orders")
+        .filter((o) => o.status !== "cancelled" && (!o.invoiceId || (existing && o.invoiceId === existing.id)))
+        .sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+      const applyOrder = (o) => {
+        doc.orderId = o.id;
+        doc[D.partyKey] = o.customerId || "";
+        doc.lines = (o.items || []).map((li) => {
+          const it = store.get("products", li.productId);
+          const gst = Number(it ? it.gstRate : 0) || 0;
+          // Order prices include GST; the invoice shows the price before GST and adds it back.
+          const rate = gst ? Math.round((Number(li.price) || 0) / (1 + gst / 100) * 10000) / 10000 : Number(li.price) || 0;
+          return it ? { itemId: it.id, qty: Number(li.qty) || 1, rate, gstRate: String(gst) } : { description: li.name || "Item", qty: Number(li.qty) || 1, rate, gstRate: "0" };
+        });
+        doc.shipping = Number(o.deliveryCharge) || "";
+        doc.notes = [`Order ${orderNo(o)}${o.channel === "online" ? " (ovalfarm.in)" : o.source ? " (" + o.source + ")" : ""}`, o.note, addressText(o.address) ? "Deliver to: " + addressText(o.address) : ""].filter(Boolean).join("\n");
+        if (doc.lines.some((l) => !l.itemId)) toast("Some order items aren't in Products & Materials. Pick the product on those lines so stock updates.", "error");
+      };
+      if (!existing && isSale && params.query && params.query.order) {
+        const o = store.get("orders", params.query.order);
+        if (o && !o.invoiceId) applyOrder(o);
+      }
       if (!doc.lines || !doc.lines.length) doc.lines = [{ qty: 1 }];
       const stockNow = calc.stockMap();
 
@@ -137,6 +158,12 @@ export function docEditor(kind) {
           <div class="editor">
             <div class="card">
               <div class="form-grid">
+                ${isSale ? (() => {
+                  const choices = orderChoices();
+                  return `<div class="field"><label>Order <span class="req">*</span></label>
+                    <select data-order><option value="">${choices.length ? "Choose the order…" : "No orders waiting for an invoice"}</option>${choices.map((o) => `<option value="${esc(o.id)}" ${o.id === doc.orderId ? "selected" : ""}>${esc(orderNo(o))} · ${esc((o.customer && o.customer.name) || "Walk-in")} · ${money(o.total)}</option>`).join("")}</select>
+                    <small class="muted">${choices.length ? "" : "Add the order first under Orders → New order, even for walk-in customers. "}Choosing an order fills in the rest.</small></div>`;
+                })() : ""}
                 <div class="field"><label>${D.partyLabel} ${kind === "purchases" ? '<span class="req">*</span>' : ""}</label>
                   <div class="with-btn"><select data-h="${D.partyKey}"><option value="">${kind === "sales" ? "Walk-in customer" : "Select supplier…"}</option>${party.map((p) => `<option value="${p.id}" ${p.id === doc[D.partyKey] ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select>
                   <button class="btn btn-ghost" data-addparty title="Add new">${icon("plus")}</button></div></div>
@@ -182,6 +209,13 @@ export function docEditor(kind) {
 
       const bind = () => {
         root.querySelectorAll("[data-h]").forEach((el) => el.addEventListener("change", () => { readHeader(); if (el.dataset.h === "shipping" || el.dataset.h === D.partyKey) draw(); }));
+        const os = root.querySelector("[data-order]");
+        if (os) os.addEventListener("change", () => {
+          readHeader();
+          const o = store.get("orders", os.value);
+          if (o) applyOrder(o); else doc.orderId = "";
+          draw();
+        });
         root.querySelectorAll(".line").forEach((row) => {
           const i = +row.dataset.i;
           row.querySelectorAll("[data-f]").forEach((el) => el.addEventListener("change", () => {
@@ -217,6 +251,7 @@ export function docEditor(kind) {
           doc.lines = doc.lines.filter((l) => l.itemId || l.description);
           if (!doc.lines.length) { doc.lines = [{ qty: 1 }]; draw(); return toast("Add at least one item", "error"); }
           if (kind === "purchases" && !doc[D.partyKey]) return toast("Choose a supplier", "error");
+          if (isSale && !doc.orderId && !(existing && !existing.orderId)) return toast("Choose the order this invoice is for", "error");
           if (doc.lines.some((l) => !(Number(l.qty) > 0))) { draw(); return toast("Each line needs a quantity", "error"); }
           if (kind === "sales" && !doc.dueDate) {
             const c = store.get("customers", doc.customerId);
@@ -225,17 +260,28 @@ export function docEditor(kind) {
           for (const l of doc.lines) for (const k of ["qty", "rate", "discount"]) if (l[k] !== "" && l[k] != null) l[k] = Number(l[k]);
           const saved = store.put(D.col, doc);
           toast(D.singular + " saved");
-          if (fromOrder && !existing) {
-            clearOrderDraft();
-            updateOrder(fromOrder.orderId, { invoiceId: saved.id, invoiceNumber: saved.number })
-              .catch((e) => toast("Invoice saved, but it couldn't be linked to the online order: " + e.message, "error"));
-          }
+          if (isSale) linkOrder(saved, prevOrderId);
           navigate(`#/${D.route}/${saved.id}`, true);
         });
       };
       draw();
     },
   };
+}
+
+// Keeps order.invoiceId in step with the invoice that bills it.
+function linkOrder(invoice, previousOrderId) {
+  const nowId = invoice ? invoice.orderId || "" : "";
+  if (previousOrderId && previousOrderId !== nowId) {
+    const old = store.get("orders", previousOrderId);
+    if (old && old.invoiceId) store.put("orders", { id: old.id, invoiceId: "", invoiceNumber: "" });
+  }
+  if (!nowId) return;
+  const o = store.get("orders", nowId);
+  if (!o) return;
+  if (o.invoiceId !== invoice.id || o.invoiceNumber !== invoice.number || o.status === "placed") {
+    store.put("orders", { id: o.id, invoiceId: invoice.id, invoiceNumber: invoice.number, ...(o.status === "placed" ? { status: "confirmed" } : {}) });
+  }
 }
 
 // ---------------- view / print ----------------
@@ -271,7 +317,7 @@ export function docView(kind) {
       const paid = calc.paidAgainst(doc.id);
       const balance = round2(t.total - paid);
       const pays = store.all("payments").filter((p) => p.refId === doc.id).sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-      const items = new Map(store.all("items").map((i) => [i.id, i]));
+      const items = new Map(store.all("products").map((i) => [i.id, i]));
       const taxByRate = new Map();
       for (const l of doc.lines || []) {
         const c = calc.lineCalc(l);
@@ -292,7 +338,8 @@ export function docView(kind) {
             <button class="btn btn-ghost" data-print>${icon("printer")}Print / PDF</button>
             ${isSale ? `<button class="btn btn-ghost" data-wa>${icon("whatsapp")}WhatsApp</button>` : ""}
             ${can("write") && isSale && doc.status === "Confirmed" ? `<button class="btn btn-ghost" data-delivered>${icon("truck")}Mark delivered</button>` : ""}
-            ${can("write") ? `<button class="btn btn-ghost" data-dup>${icon("file")}Duplicate</button>` : ""}
+            ${isSale && doc.orderId && store.get("orders", doc.orderId) ? `<a class="btn btn-ghost" href="#/orders/${esc(doc.orderId)}">${icon("cart")}${esc(orderNo(store.get("orders", doc.orderId)))}</a>` : ""}
+            ${can("write") && !isSale ? `<button class="btn btn-ghost" data-dup>${icon("file")}Duplicate</button>` : ""}
             ${can("delete") ? `<button class="btn btn-ghost btn-danger-text" data-del>${icon("trash")}Delete</button>` : ""}
           </div>
         </div>
@@ -384,6 +431,7 @@ export function docView(kind) {
       if (q("[data-del]")) q("[data-del]").addEventListener("click", async () => {
         if (!(await confirmDialog(`Delete ${doc.number}? Stock and balances will be recalculated for everyone.`, { danger: true, okLabel: "Delete" }))) return;
         store.remove(D.col, doc.id);
+        if (isSale) linkOrder(null, doc.orderId);
         toast(D.singular + " deleted");
         navigate("#/" + D.route, true);
       });

@@ -78,7 +78,7 @@ function pl() {
 function salesReport() {
   const { from, to } = st;
   const sales = store.all("sales").filter((s) => calc.saleCounts(s) && inRange(s.date, from, to));
-  const items = new Map(store.all("items").map((i) => [i.id, i]));
+  const items = new Map(store.all("products").map((i) => [i.id, i]));
   const customers = new Map(store.all("customers").map((c) => [c.id, c]));
   const byItem = new Map(), byCust = new Map();
   for (const s of sales) {
@@ -115,7 +115,7 @@ function productionReport() {
   });
   const harvest = sum(store.all("harvests").filter((h) => inRange(h.date, from, to)), (h) => h.qty);
   const runs = store.all("productions").filter((p) => inRange(p.date, from, to));
-  const items = new Map(store.all("items").map((i) => [i.id, i]));
+  const items = new Map(store.all("products").map((i) => [i.id, i]));
   const rRows = runs.sort((a, b) => (a.date || "").localeCompare(b.date || "")).map((r) => {
     const it = items.get(r.outputItemId) || {}; const c = calc.productionCost(r);
     return [r.lotNo, { html: fmtDate(r.date), csv: r.date }, it.name || "", { html: num(r.outputQty) + " " + esc(it.unit || ""), csv: r.outputQty }, m(c.total), m(c.perUnit)];
@@ -160,7 +160,7 @@ function gstReport() {
 }
 
 function stockReport() {
-  const items = store.all("items").filter((i) => i.active !== false).sort((a, b) => (a.category || "").localeCompare(b.category || "") || a.name.localeCompare(b.name));
+  const items = store.all("products").filter((i) => i.active !== false).sort((a, b) => (a.category || "").localeCompare(b.category || "") || a.name.localeCompare(b.name));
   const rows = items.map((i) => {
     const q = calc.stockOf(i.id);
     return [i.name, i.category || "", { html: num(q) + " " + esc(i.unit || ""), csv: q }, m(i.costPrice || 0), m(Math.max(0, q) * (Number(i.costPrice) || 0)), m(Math.max(0, q) * (Number(i.salePrice) || 0))];

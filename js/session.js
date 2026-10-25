@@ -1,5 +1,6 @@
 // Who is signed in and what their role lets them do.
-// Roles are a convenience inside the app; the real gate is who the Drive folder is shared with.
+// The team list is the Firestore "staff" collection (Settings > Team). The Firestore rules
+// enforce the same roles, so the menus here only hide what someone couldn't do anyway.
 import { store } from "./store.js";
 
 export const ROLES = {
@@ -9,34 +10,33 @@ export const ROLES = {
   viewer:  { label: "Viewer",  write: false, delete: false, finance: true,  reports: true,  admin: false },
 };
 
-export const session = { user: null, mode: "off" };
+// mode: off | firebase | demo
+export const session = { user: null, mode: "off", role: "" };
 
 export function userKey(email) {
-  return String(email || "").toLowerCase().replace(/[^a-z0-9@._-]/g, "_");
+  return String(email || "").trim().toLowerCase();
 }
 
 export function currentRole() {
   if (session.mode === "demo") return "admin";
-  const me = store.get("users", userKey(session.user && session.user.email));
-  return (me && ROLES[me.role] && me.role) || "staff";
+  const me = store.get("staff", userKey(session.user && session.user.email));
+  const role = (me && me.role) || session.role;
+  return ROLES[role] ? role : "viewer";
 }
 
 export function can(perm) {
   return !!ROLES[currentRole()][perm];
 }
 
-// Registers the signed-in person in the shared team list. The very first person becomes Admin.
-export function registerUser() {
+// Keeps the person's own name, photo and last-seen day current on their team record.
+export function touchStaff() {
   const u = session.user;
-  if (!u || !u.email) return;
+  if (!u || !u.email || session.mode !== "firebase") return;
   const id = userKey(u.email);
-  const all = store.all("users");
-  const me = store.get("users", id);
+  const me = store.get("staff", id);
+  if (!me) return;
   const day = new Date().toISOString().slice(0, 10);
-  if (!me) {
-    const hasAdmin = all.some((x) => x.role === "admin");
-    store.put("users", { id, email: u.email, name: u.name || u.email, picture: u.picture || "", role: hasAdmin ? "staff" : "admin", lastSeen: day });
-  } else if (me.lastSeen !== day || (u.picture && me.picture !== u.picture)) {
-    store.put("users", { id, lastSeen: day, name: me.name || u.name, picture: u.picture || me.picture || "" });
+  if (me.lastSeen !== day || (u.picture && me.picture !== u.picture) || (!me.name && u.name)) {
+    store.put("staff", { id, lastSeen: day, name: me.name || u.name || "", picture: u.picture || me.picture || "" });
   }
 }
