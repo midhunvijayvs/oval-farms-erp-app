@@ -20,7 +20,7 @@ import { settingsView, applyTheme } from "./views/settings.js";
 import { seedDemo } from "./seed.js";
 import { seedWebsiteProducts } from "./seed-products.js";
 
-window.OVAL_VERSION = "2.0.1";
+window.OVAL_VERSION = "2.0.2";
 const cfg = window.OVAL_CONFIG || {};
 const LS = {
   get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },

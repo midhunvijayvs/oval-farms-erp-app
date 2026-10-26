@@ -121,6 +121,24 @@ await signOut(siteAuth);
 const anjaliRow = await waitFor(async () => (await page.$$eval("tr[data-id]", (trs) => trs.map((t) => t.textContent).find((x) => x.includes("Anjali Menon")))) || null);
 check(!!anjaliRow && anjaliRow.includes("Online"), "website sign-up shows in the same customers list as Online");
 
+// ---- Admin adds a manager to the team ----
+await page.goto(BASE + "#/settings");
+await page.click('[data-tab="team"]');
+await page.fill("[data-new-email]", "Brother@Gmail.com");
+await page.selectOption("[data-new-role]", "manager");
+await page.click("[data-add-member]");
+await page.waitForTimeout(1500);
+await page.reload();
+await page.waitForSelector(".shell", { timeout: 15000 });
+await page.goto(BASE + "#/settings");
+await page.click('[data-tab="team"]');
+const teamRow = await waitFor(async () => (await page.$$eval("tbody tr", (trs) => trs.map((t) => t.textContent).find((x) => x.includes("brother@gmail.com")))) || null);
+check(!!teamRow && (await page.$eval('[data-role="brother@gmail.com"]', (s) => s.value)) === "manager", "team member saved as Manager");
+await page.click('[data-remove="brother@gmail.com"]');
+await page.click(".modal-foot .btn-primary");
+await page.waitForTimeout(500);
+check(!(await page.textContent("#view")).includes("brother@gmail.com"), "team member removed");
+
 // ---- Unpublishing takes a product off the website ----
 await page.goto(BASE + "#/products");
 await page.waitForSelector("tr[data-id]");
