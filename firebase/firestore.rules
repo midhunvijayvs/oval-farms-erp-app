@@ -53,6 +53,14 @@ service cloud.firestore {
       allow write: if canWrite();
     }
 
+    // ---------- Delivery charges ----------
+    // Distance ranges with their pincodes, free-delivery minimum and charge per kg.
+    // The website reads them at checkout, so they are public; only staff change them.
+    match /delivery/{id} {
+      allow read: if true;
+      allow write: if canWrite();
+    }
+
     // ---------- Customers ----------
     // One list for website sign-ups (channel 'online') and customers added in the ERP ('offline').
     // uid is the customer's website login, or null when they don't have one yet.
@@ -67,6 +75,8 @@ service cloud.firestore {
       return str(d.name, 100)
         && optStr(d, 'phone', 20) && optStr(d, 'phoneE164', 16) && optStr(d, 'email', 200)
         && (!('addresses' in d) || (d.addresses is list && d.addresses.size() <= 10))
+        && optStr(d, 'addrLine1', 200) && optStr(d, 'addrLine2', 200) && optStr(d, 'addrLandmark', 200)
+        && optStr(d, 'addrCity', 100) && optStr(d, 'addrPincode', 6) && optStr(d, 'mapUrl', 500)
         && (!('marketing' in d) || d.marketing is bool)
         && d.updatedAt == request.time;
     }
@@ -75,7 +85,7 @@ service cloud.firestore {
       allow read: if isStaff() || ownCustomer(resource.data) || claimable(resource.data);
       allow create: if canWrite()
                     || (signedIn() && id == request.auth.uid
-                         && request.resource.data.keys().hasOnly(['name', 'phone', 'phoneE164', 'email', 'addresses', 'marketing', 'channel', 'uid', 'accountStatus', 'lastLoginAt', 'createdAt', 'updatedAt'])
+                         && request.resource.data.keys().hasOnly(['name', 'phone', 'phoneE164', 'email', 'addresses', 'addrLine1', 'addrLine2', 'addrLandmark', 'addrCity', 'addrPincode', 'mapUrl', 'marketing', 'channel', 'uid', 'accountStatus', 'lastLoginAt', 'createdAt', 'updatedAt'])
                          && customerFieldsOk(request.resource.data)
                          && request.resource.data.uid == request.auth.uid
                          && request.resource.data.channel == 'online'
@@ -83,7 +93,7 @@ service cloud.firestore {
                          && request.resource.data.createdAt == request.time);
       allow update: if canWrite()
                     || (ownCustomer(resource.data)
-                         && changed().hasOnly(['name', 'phone', 'phoneE164', 'email', 'addresses', 'marketing', 'accountStatus', 'lastLoginAt', 'updatedAt'])
+                         && changed().hasOnly(['name', 'phone', 'phoneE164', 'email', 'addresses', 'addrLine1', 'addrLine2', 'addrLandmark', 'addrCity', 'addrPincode', 'mapUrl', 'marketing', 'accountStatus', 'lastLoginAt', 'updatedAt'])
                          && request.resource.data.uid == resource.data.uid
                          && (!('accountStatus' in changed()) || request.resource.data.accountStatus == 'active')
                          && customerFieldsOk(request.resource.data))

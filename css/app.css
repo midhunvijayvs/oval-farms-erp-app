@@ -514,3 +514,33 @@ body.modal-open { overflow: hidden; }
 .block { display: block; }
 .order-totals { padding: 12px 18px 16px; margin-left: auto; max-width: 340px; border-top: 1px solid var(--border); }
 .nav-badge { margin-left: auto; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--warn); color: #fff; font-size: 11.5px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+
+/* ---------- delivery: pincodes and charges ---------- */
+.pin-check { padding: 16px; display: grid; gap: 8px; max-width: 520px; }
+.pin-check label { display: grid; gap: 4px; }
+.pin-check label > span { font-size: 12px; font-weight: 700; color: var(--muted); }
+.pin-result { font-size: 14px; }
+.zone-list { display: grid; gap: 12px; margin-top: 16px; }
+.zone-card { border: 1px solid var(--border); border-radius: 14px; background: var(--surface); overflow: hidden; }
+.zone-card.paused { border-color: var(--warn); }
+.zone-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding: 14px 16px; background: var(--surface-2); }
+.zone-head h3 { font-size: 16px; font-weight: 800; }
+.zone-head p { margin: 2px 0 0; }
+.zone-sum { text-align: right; font-weight: 700; white-space: nowrap; }
+.zone-body { padding: 14px 16px; display: grid; gap: 12px; }
+.zone-fields { display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end; }
+.zone-fields label { display: grid; gap: 4px; min-width: 0; }
+.zone-fields label > span { font-size: 12px; font-weight: 700; color: var(--muted); }
+.zone-fields .check { display: flex; gap: 8px; align-items: center; padding-bottom: 10px; white-space: nowrap; }
+.zone-fields .check span { font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.zone-add { display: flex; gap: 8px; }
+.zone-add input { flex: 1; min-width: 0; }
+.pin-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.pin-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border: 1px solid var(--border); border-radius: 999px; font-size: 13px; font-weight: 600; background: var(--surface-2); }
+.pin-chip button { border: 0; background: none; color: var(--muted); cursor: pointer; display: inline-flex; padding: 2px; border-radius: 50%; }
+.pin-chip button:hover { color: var(--danger); background: var(--danger-soft); }
+.pin-chip svg { width: 14px; height: 14px; }
+@media (max-width: 720px) {
+  .zone-fields { grid-template-columns: 1fr 1fr; }
+  .zone-fields .check { grid-column: 1 / -1; padding-bottom: 0; }
+}

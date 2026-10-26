@@ -54,7 +54,16 @@ export function catalogEntry(p, k = null, i = 0) {
     pack_id: k ? k.id : null,
     pack_name: k ? k.name : null,
     pack_size: k ? Number(k.size) : 1,
+    weight_kg: number(weightOf(p, k ? Number(k.size) : 1)),
   };
+}
+
+// How much one of these weighs, in kg: packs sold by weight know it, anything else uses the
+// product's "Weight of one unit (kg)". 0 means the delivery charge per kg costs nothing for it.
+export function weightOf(p, size = 1) {
+  const unit = String(p.unit || "").toLowerCase();
+  const per = unit === "kg" ? 1 : unit === "g" ? 0.001 : Number(p.weightKg) || 0;
+  return Math.round(per * (Number(size) || 1) * 1000) / 1000;
 }
 
 export const isListed = (p) => p.published === true && p.active !== false;
