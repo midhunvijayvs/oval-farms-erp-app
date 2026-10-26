@@ -144,6 +144,20 @@ export const settingsView = {
       store.put("settings", { ...store.settings(), ...vals, id: "business" });
       toast("Business profile saved");
     });
+    if (q("[data-add-member]")) q("[data-add-member]").addEventListener("click", () => {
+      const email = userKey(q("[data-new-email]").value.trim());
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast("Enter their Google account email", "error"); q("[data-new-email]").focus(); return; }
+      if (store.get("staff", email)) { toast(`${email} is already on the team`, "error"); return; }
+      store.put("staff", { id: email, email, role: q("[data-new-role]").value });
+      toast(`${email} added. Send them the app link.`);
+      rr();
+    });
+    root.querySelectorAll("[data-remove]").forEach((b) => b.addEventListener("click", async () => {
+      if (!(await confirmDialog(`Remove ${b.dataset.remove} from the team? They can no longer open the app.`, { okLabel: "Remove" }))) return;
+      store.remove("staff", b.dataset.remove);
+      toast("Removed from the team");
+      rr();
+    }));
     root.querySelectorAll("[data-role]").forEach((sel) => sel.addEventListener("change", () => {
       store.put("staff", { id: sel.dataset.role, role: sel.value });
       toast("Role updated");
