@@ -49,6 +49,8 @@ export const schemas = {
       { k: "shelfLifeDays", label: "Shelf life (days)", type: "number", half: true },
       { k: "active", label: "Active", type: "checkbox", default: true },
       { k: "notes", label: "Notes (staff only)", type: "textarea" },
+      { k: "_packs", label: "Pack sizes", type: "heading" },
+      { k: "packs", label: "Sell from the same stock in different sizes, e.g. Loose (1 kg) and Bag (25 kg). Each pack has its own price and shows as its own product on ovalfarm.in. Leave empty to sell it as it is, by the stock unit at the selling price.", type: "packs" },
       { k: "_web", label: "On the website (ovalfarm.in)", type: "heading" },
       { k: "published", label: "Show on ovalfarm.in", type: "checkbox", default: false },
       { k: "webCategory", label: "Website category", type: "select", list: "websiteCategories", half: true, showIf: (r) => r.published },
@@ -71,7 +73,7 @@ export const schemas = {
     columns: [
       { k: "name", label: "Name", primary: true },
       { k: "category", label: "Category" },
-      { k: "salePrice", label: "Price", type: "money", align: "right" },
+      { k: "_price", label: "Price", align: "right" },
       { k: "_stock", label: "Stock", align: "right" },
       { k: "_web", label: "Website", type: "status" },
     ],

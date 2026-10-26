@@ -2,9 +2,9 @@
 import { store } from "../store.js";
 import { schemas, list } from "../schema.js";
 import { can } from "../session.js";
-import { esc, money, num, sum, today, addDays, inRange, monthStart, toCSV, downloadFile, fmtDate } from "../util.js";
+import { esc, money, num, sum, today, addDays, inRange, monthStart, toCSV, downloadFile, fmtDate, uid } from "../util.js";
 import { icon } from "../icons.js";
-import { openModal, toast, confirmDialog, fieldHtml, defaultsFor, readFields, validate, table, pageHead, refLabel, chip } from "../ui.js";
+import { openModal, toast, confirmDialog, fieldHtml, defaultsFor, readFields, validate, table, pageHead, refLabel, chip, packRow } from "../ui.js";
 import * as calc from "../calc.js";
 import { productHooks } from "./products.js";
 import { customerHooks } from "./customers.js";
@@ -118,6 +118,7 @@ export function openForm(key, rec = null, { presets = {}, onSaved } = {}) {
       const form = el.querySelector("form");
       form.addEventListener("submit", (e) => e.preventDefault());
       for (const f of sc.fields) if (f.type === "images") bindImages(form, f, data.id || "new");
+      for (const f of sc.fields) if (f.type === "packs") bindPacks(form, f);
       if (h.formMount) h.formMount({ el, rec: data, close });
       form.addEventListener("change", (e) => {
         e.target.classList && e.target.classList.remove("invalid");
@@ -220,6 +221,40 @@ export function listView(key, opts = {}) {
 }
 
 // Photo list on the product form: upload (resized, to Firebase Storage), paste a link, reorder, remove.
+// Pack sizes table: rows of inputs kept in a hidden JSON field so readFields picks them up.
+function bindPacks(form, f) {
+  const box = form.querySelector(`[data-packs="${f.k}"]`);
+  if (!box) return;
+  const input = box.querySelector(`input[name="${f.k}"]`);
+  const unit = () => (form.querySelector('[name="unit"]') || {}).value || "units";
+  const read = () => [...box.querySelectorAll(".pack-row")].map((row) => {
+    const prev = (JSON.parse(input.value || "[]")[+row.dataset.pack]) || {};
+    const val = (k) => row.querySelector(`[data-pk="${k}"]`);
+    const n = (k) => (val(k).value === "" ? "" : Number(val(k).value));
+    return { ...prev, id: prev.id || uid().slice(0, 6), name: val("name").value.trim(), size: n("size"), price: n("price"), mrp: n("mrp"), published: val("published").checked };
+  });
+  const save = () => { input.value = JSON.stringify(read()); };
+  const draw = (packs) => {
+    input.value = JSON.stringify(packs);
+    box.querySelector(".pack-rows").innerHTML = packs.map((k, i) => packRow(k, i, unit())).join("");
+  };
+  box.addEventListener("input", save);
+  box.addEventListener("change", save);
+  box.addEventListener("click", (e) => {
+    const del = e.target.closest("[data-pack-del]");
+    if (del) { const packs = read(); packs.splice(+del.dataset.packDel, 1); draw(packs); }
+    if (e.target.closest("[data-pack-add]")) {
+      const packs = read();
+      packs.push({ id: uid().slice(0, 6), name: packs.length ? "" : "Loose", size: packs.length ? "" : 1, price: "", mrp: "", published: true });
+      draw(packs);
+      const rows = box.querySelectorAll(".pack-row");
+      rows[rows.length - 1].querySelector('[data-pk="name"]').focus();
+    }
+  });
+  const unitSel = form.querySelector('[name="unit"]');
+  if (unitSel) unitSel.addEventListener("change", () => box.querySelectorAll("[data-pack-unit]").forEach((b) => { b.textContent = unit(); }));
+}
+
 function bindImages(form, f, ownerId) {
   const box = form.querySelector(`[data-images="${f.k}"]`);
   if (!box) return;

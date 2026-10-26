@@ -404,6 +404,18 @@ body.modal-open { overflow: hidden; }
 .img-main { display: block; width: 100%; margin-top: 4px; border: 0; background: none; font: inherit; font-size: 12px; color: var(--muted); cursor: pointer; text-align: center; }
 .img-main.on { color: var(--brand-strong); font-weight: 700; cursor: default; }
 .img-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.pack-field { display: grid; gap: 10px; justify-items: start; }
+.pack-rows { display: grid; gap: 8px; width: 100%; }
+.pack-row { display: grid; grid-template-columns: 1.4fr repeat(3, 1fr) auto auto; gap: 8px; align-items: end; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
+.pack-row label { display: grid; gap: 4px; min-width: 0; }
+.pack-row label > span { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+.pack-row label > span b { text-transform: none; }
+.pack-row .pack-web { display: flex; gap: 6px; align-items: center; padding-bottom: 10px; white-space: nowrap; }
+.pack-row .pack-web span { text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+@media (max-width: 640px) {
+  .pack-row { grid-template-columns: 1fr 1fr; }
+  .pack-row .pack-name { grid-column: 1 / -1; }
+}
 .order-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
 .order-list li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
 .order-list li.dragging { opacity: .5; }

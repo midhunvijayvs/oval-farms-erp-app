@@ -149,6 +149,40 @@ await page.click(".modal-foot .btn-primary");
 cat = await waitFor(async () => { const c = await catalog(); return c.length === 6 ? c : null; });
 check(cat && !cat.some((p) => p.id === "mushroom-spawn"), "unpublished product leaves the catalog");
 
+// ---- Pack sizes: one product shows as one website product per pack ----
+await page.click('tr[data-id="white-oyster-mushrooms"]');
+await page.waitForSelector(".modal [data-pack-add]");
+for (const [name, size, price] of [["Small", 1, 90], ["Family", 4, 320]]) {
+  await page.click(".modal [data-pack-add]");
+  const r = page.locator(".modal .pack-row").last();
+  await r.locator('[data-pk="name"]').fill(name);
+  await r.locator('[data-pk="size"]').fill(String(size));
+  await r.locator('[data-pk="price"]').fill(String(price));
+}
+await page.click(".modal-foot .btn-primary");
+cat = await waitFor(async () => { const c = await catalog(); return c.filter((p) => p.product_id === "white-oyster-mushrooms").length === 2 ? c : null; });
+const packs = cat ? cat.filter((p) => p.product_id === "white-oyster-mushrooms") : [];
+check(packs.length === 2 && !cat.some((p) => p.id === "white-oyster-mushrooms"), "each pack size is its own catalog entry");
+const fam = packs.find((p) => p.pack_name === "Family");
+check(fam && fam.price === 320 && fam.pack_size === 4 && fam.name.includes("Family"), "pack entry has its own name, price and size");
+await signInWithEmailAndPassword(siteAuth, "meera@example.com", password);
+const packOrder = await addDoc(collection(siteDb, "orders"), {
+  customerUid: meera.uid, customerId, channel: "online", source: "Website",
+  customer: { name: "Meera Das", phone: "+91 9847012345", email: "meera@example.com" },
+  address: { line1: "Rose Villa", city: "Kozhikode", pincode: "673001" },
+  items: [{ productId: fam.product_id, packId: fam.pack_id, size: fam.pack_size, name: fam.name, qty: 1, unit: fam.unit, price: fam.price }],
+  itemCount: 1, subtotal: 320, deliveryCharge: 0, total: 320, note: "", payment: "cod", status: "placed",
+  createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+});
+await signOut(siteAuth);
+await waitFor(async () => { await page.goto(BASE + "#/orders/" + packOrder.id); await page.waitForSelector(".page-head h1", { timeout: 2000 }); return (await page.textContent("#view")).includes("Family"); });
+await page.click('a[href^="#/sales/new?order="]');
+await page.waitForSelector("[data-order]");
+check((await page.$eval(".line [data-f=itemId]", (s) => s.options[s.selectedIndex].textContent)).includes("Family"), "invoice from a website pack order picks that pack");
+await page.click("[data-save]");
+await page.waitForSelector(".paper");
+check((await page.textContent(".paper")).includes("320.00"), "pack invoice total matches the order");
+
 check(!errors.length, `no console errors ${errors.join(" | ")}`);
 await browser.close();
 console.log(fail ? `${fail} FAILED` : "ALL PASSED");

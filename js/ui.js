@@ -130,6 +130,15 @@ export function fieldHtml(f, value, rec = {}) {
       </div>`;
       break;
     }
+    case "packs": {
+      const packs = Array.isArray(value) ? value : [];
+      input = `<div class="pack-field" data-packs="${f.k}">
+        <input type="hidden" name="${f.k}" value="${esc(JSON.stringify(packs))}">
+        <div class="pack-rows">${packs.map((k, i) => packRow(k, i, rec.unit)).join("")}</div>
+        <button type="button" class="btn btn-ghost" data-pack-add>${icon("plus")}Add pack size</button>
+      </div>`;
+      break;
+    }
     case "textarea":
       input = `<textarea id="${id}" name="${f.k}" rows="${f.rows || 2}" placeholder="${esc(f.placeholder || "")}">${esc(value)}</textarea>`;
       break;
@@ -169,13 +178,26 @@ export function defaultsFor(fields) {
   return r;
 }
 
+// One row of the "Pack sizes" table on a product (see js/packs.js)
+export function packRow(k, i, unit) {
+  const v = (x) => esc(x === undefined || x === null ? "" : x);
+  return `<div class="pack-row" data-pack="${i}">
+    <label class="pack-name"><span>Pack name</span><input data-pk="name" value="${v(k.name)}" placeholder="e.g. Loose, Bag"></label>
+    <label><span>Uses <b data-pack-unit>${esc(unit || "units")}</b></span><input data-pk="size" type="number" inputmode="decimal" step="any" min="0" value="${v(k.size)}" placeholder="e.g. 25"></label>
+    <label><span>Price (incl. GST)</span><input data-pk="price" type="number" inputmode="decimal" step="0.01" value="${v(k.price)}"></label>
+    <label><span>MRP</span><input data-pk="mrp" type="number" inputmode="decimal" step="0.01" value="${v(k.mrp)}"></label>
+    <label class="check pack-web"><input data-pk="published" type="checkbox" ${k.published === false ? "" : "checked"}><span>On ovalfarm.in</span></label>
+    <button type="button" class="icon-btn" data-pack-del="${i}" aria-label="Remove pack size">${icon("trash")}</button>
+  </div>`;
+}
+
 export function readFields(root, fields) {
   const out = {};
   for (const f of fields) {
     const el = root.querySelector(`[name="${f.k}"]`);
     if (!el) continue;
     if (f.type === "checkbox") out[f.k] = el.checked;
-    else if (f.type === "images") { try { out[f.k] = JSON.parse(el.value || "[]"); } catch (e) { out[f.k] = []; } }
+    else if (f.type === "images" || f.type === "packs") { try { out[f.k] = JSON.parse(el.value || "[]"); } catch (e) { out[f.k] = []; } }
     else if (f.type === "lines") out[f.k] = el.value.split("\n").map((x) => x.trim()).filter(Boolean);
     else if (f.type === "number" || f.type === "money") out[f.k] = el.value === "" ? "" : Number(el.value);
     else out[f.k] = el.value.trim();

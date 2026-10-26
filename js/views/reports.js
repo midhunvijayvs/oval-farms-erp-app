@@ -4,6 +4,7 @@ import { esc, money, num, sum, today, addDays, fmtDate, inRange, monthStart, mon
 import { icon } from "../icons.js";
 import { pageHead, emptyState, stat } from "../ui.js";
 import * as calc from "../calc.js";
+import { sizeOf } from "../packs.js";
 import { monthSummary } from "./attendance.js";
 
 const TABS = [
@@ -89,7 +90,8 @@ function salesReport() {
       const lc = calc.lineCalc(l);
       const k = l.itemId || l.description || "Other";
       const e = byItem.get(k) || { qty: 0, taxable: 0, total: 0 };
-      e.qty += Number(l.qty) || 0; e.taxable += lc.taxable; e.total += lc.total; byItem.set(k, e);
+      // In the product's stock unit: 2 bags of 25 kg count as 50 kg
+      e.qty += (Number(l.qty) || 0) * (l.itemId ? sizeOf(l) : 1); e.taxable += lc.taxable; e.total += lc.total; byItem.set(k, e);
     }
   }
   const itemRows = [...byItem].sort((a, b) => b[1].total - a[1].total).map(([k, v]) => {

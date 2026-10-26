@@ -20,6 +20,10 @@ export function seedDemo() {
     ["pickle", { name: "Mushroom Pickle 200 g", category: "Value-Added Product", unit: "jar", salePrice: 180, costPrice: 0, gstRate: "12", hsn: "2001", reorderLevel: 24, shelfLifeDays: 180 }],
     ["powder", { name: "Mushroom Powder 100 g", category: "Value-Added Product", unit: "pack", salePrice: 299, costPrice: 0, gstRate: "5", hsn: "0712", reorderLevel: 15, shelfLifeDays: 365, ...web("Dried & powders", "home/sec-2-8.jpg", "A pinch a day for taste and nutrition.", 50, { netQuantity: 100, netUnit: "g" }) }],
     ["soup", { name: "Mushroom Soup Premix 25 g", category: "Value-Added Product", unit: "pack", salePrice: 60, mrp: 60, costPrice: 0, gstRate: "12", hsn: "2104", reorderLevel: 30, shelfLifeDays: 240, openingStock: 120, ...web("Ready to cook", "shop/soup-premix.jpg", "Rich, creamy mushroom soup, ready in 3 minutes.", 30, { badge: "New", featured: true, netQuantity: 25, netUnit: "g" }) }],
+    // One stock in kg, sold loose by the kg or as 25 kg bags (pack sizes)
+    ["pellet", { name: "Mush Pellet", category: "Value-Added Product", unit: "kg", salePrice: 39, costPrice: 22, gstRate: "0", reorderLevel: 30, openingStock: 120,
+      packs: [{ id: "loose", name: "Loose", size: 1, price: 39, mrp: "", published: true }, { id: "bag25", name: "Bag", size: 25, price: 850, mrp: 975, published: true }],
+      ...web("Grow your own", "home/sec-2-3.jpg", "Pellets for growing mushrooms, loose or by the bag.", 60) }],
     ["spawn", { name: "Oyster Spawn", category: "Raw Material", unit: "kg", costPrice: 90, gstRate: "0", reorderLevel: 10, openingStock: 25 }],
     ["mspawn", { name: "Milky Spawn", category: "Raw Material", unit: "kg", costPrice: 110, gstRate: "0", reorderLevel: 8, openingStock: 12 }],
     ["straw", { name: "Paddy Straw", category: "Raw Material", unit: "kg", costPrice: 8, gstRate: "0", reorderLevel: 100, openingStock: 400 }],
