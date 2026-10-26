@@ -9,6 +9,7 @@ import { toast, pageHead, chip, emptyState, stat, confirmDialog } from "../ui.js
 import { navigate } from "../router.js";
 import { openForm } from "./crud.js";
 import * as calc from "../calc.js";
+import { sellables, findPack, keyOf, splitKey, packsOf } from "../packs.js";
 
 export const ORDER_STATUSES = [
   { k: "placed", label: "New", tone: "warn" },
@@ -174,7 +175,9 @@ export const orderEditor = {
     const existing = params.id ? store.get("orders", params.id) : null;
     if (params.id && !existing) { root.innerHTML = emptyState("This order was not found."); return; }
     if (!can("write") || (existing && existing.invoiceId)) { navigate("#/orders" + (params.id ? "/" + params.id : ""), true); return; }
-    const products = store.all("products").filter((p) => p.active !== false && (p.salePrice !== "" && p.salePrice != null || p.published)).sort((a, b) => a.name.localeCompare(b.name));
+    const products = store.all("products").filter((p) => p.active !== false && (p.salePrice !== "" && p.salePrice != null || p.published || packsOf(p).length)).sort((a, b) => a.name.localeCompare(b.name));
+    // Each product, or each of its pack sizes, is one choice: value "productId" or "productId|packId"
+    const choices = sellables(products);
     const o = existing ? JSON.parse(JSON.stringify(existing)) : {
       channel: "offline", source: list("orderSources")[0] || "Phone call", status: "confirmed", payment: "cod",
       customerId: params.query && params.query.customer || "", items: [blankLine()], deliveryCharge: "", note: "", staffNote: "",
@@ -185,11 +188,16 @@ export const orderEditor = {
 
     const lineRow = (l, i) => {
       const p = products.find((x) => x.id === l.productId) || store.get("products", l.productId);
-      const avail = p ? calc.availableOf(p.id) + (existing ? Number((existing.items || []).filter((x) => x.productId === p.id).reduce((t, x) => t + (Number(x.qty) || 0), 0)) : 0) : null;
+      const k = p ? findPack(p, l.packId) : null;
+      const size = Number(l.size) || (k ? Number(k.size) : 1);
+      const key = keyOf(l.productId, l.packId);
+      // What this order already holds back counts as available while editing it
+      const held = existing ? (existing.items || []).filter((x) => x.productId === (p && p.id)).reduce((t, x) => t + (Number(x.qty) || 0) * (Number(x.size) || 1), 0) : 0;
+      const avail = p ? calc.availableOf(p.id) + held : null;
       return `<div class="line line-simple" data-i="${i}">
-        <div class="line-item"><select data-f="productId"><option value="">Select product…</option>${products.map((x) => `<option value="${esc(x.id)}" ${x.id === l.productId ? "selected" : ""}>${esc(x.name)}</option>`).join("")}${p && !products.includes(p) ? `<option value="${esc(p.id)}" selected>${esc(p.name)}</option>` : ""}</select>
-          ${p ? `<small class="${Number(l.qty) > avail ? "text-warn" : "muted"}">Available: ${num(avail)} ${esc(p.unit || "")}</small>` : l.name ? `<small class="text-warn">${esc(l.name)} (not in Products)</small>` : ""}</div>
-        <label class="line-num"><span>Qty${p ? " (" + esc(p.unit || "") + ")" : ""}</span><input data-f="qty" type="number" inputmode="decimal" step="any" min="0" value="${esc(l.qty ?? "")}"></label>
+        <div class="line-item"><select data-f="productId"><option value="">Select product…</option>${choices.map((c) => `<option value="${esc(c.key)}" ${c.key === key ? "selected" : ""}>${esc(c.name)}</option>`).join("")}${p && !choices.some((c) => c.key === key) ? `<option value="${esc(key)}" selected>${esc(l.name || p.name)}</option>` : ""}</select>
+          ${p ? `<small class="${Number(l.qty) * size > avail ? "text-warn" : "muted"}">Available: ${num(avail)} ${esc(p.unit || "")}${k ? ` (${num(Math.floor(avail / size))} × ${esc(k.name)})` : ""}</small>` : l.name ? `<small class="text-warn">${esc(l.name)} (not in Products)</small>` : ""}</div>
+        <label class="line-num"><span>Qty${p ? " (" + esc(k ? k.name : p.unit || "") + ")" : ""}</span><input data-f="qty" type="number" inputmode="decimal" step="any" min="0" value="${esc(l.qty ?? "")}"></label>
         <label class="line-num"><span>Price</span><input data-f="price" type="number" inputmode="decimal" step="0.01" value="${esc(l.price ?? "")}"></label>
         <button class="icon-btn line-del" data-del="${i}" aria-label="Remove line">${icon("trash")}</button>
       </div>`;
@@ -273,11 +281,12 @@ export const orderEditor = {
           readHeader();
           const l = o.items[i];
           const f = el.dataset.f;
-          l[f] = el.type === "number" ? (el.value === "" ? "" : Number(el.value)) : el.value;
           if (f === "productId") {
-            const p = store.get("products", el.value);
-            if (p) { l.price = p.salePrice === "" || p.salePrice == null ? "" : Number(p.salePrice); l.name = p.name; l.unit = p.unit || ""; }
-          }
+            const c = choices.find((x) => x.key === el.value);
+            const { productId, packId } = splitKey(el.value);
+            Object.assign(l, { productId, packId: packId || null, size: c ? c.size : 1 });
+            if (c) { l.price = c.price === "" || c.price == null ? "" : Number(c.price); l.name = c.name; l.unit = c.pack ? c.pack.name : c.product.unit || ""; }
+          } else l[f] = el.type === "number" ? (el.value === "" ? "" : Number(el.value)) : el.value;
           draw();
           const again = root.querySelector(`.line[data-i="${i}"] [data-f="${f === "productId" ? "qty" : f}"]`);
           if (again) again.focus();
@@ -296,7 +305,12 @@ export const orderEditor = {
         readHeader();
         const items = o.items.filter((l) => l.productId || l.name).map((l) => {
           const p = store.get("products", l.productId);
-          return { productId: l.productId || "", name: (p && p.name) || l.name || "", qty: Number(l.qty) || 0, unit: (p && p.unit) || l.unit || "", price: Number(l.price) || 0 };
+          const c = choices.find((x) => x.key === keyOf(l.productId, l.packId));
+          return {
+            productId: l.productId || "", packId: l.packId || null, size: Number(l.size) || (c ? c.size : 1),
+            name: (c && c.name) || l.name || (p && p.name) || "", qty: Number(l.qty) || 0,
+            unit: (c && c.pack ? c.pack.name : p && p.unit) || l.unit || "", price: Number(l.price) || 0,
+          };
         });
         if (!items.length) return toast("Add at least one item", "error");
         if (items.some((l) => !(l.qty > 0))) return toast("Each item needs a quantity", "error");

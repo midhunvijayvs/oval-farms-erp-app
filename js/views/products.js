@@ -3,11 +3,12 @@
 import { store } from "../store.js";
 import { schemas } from "../schema.js";
 import { can } from "../session.js";
-import { esc, num, uid } from "../util.js";
+import { esc, num, uid, money } from "../util.js";
 import { icon } from "../icons.js";
 import { openModal, toast } from "../ui.js";
 import * as calc from "../calc.js";
 import { isListed, websiteStock } from "../catalog.js";
+import { packsOf } from "../packs.js";
 
 // Website details stay saved while a product is unpublished, so publishing again restores them.
 for (const f of schemas.products.fields) if (f.showIf) f.keepWhenHidden = true;
@@ -19,11 +20,17 @@ export const productHooks = {
   decorate: (r) => ({
     ...r,
     _stock: `${num(calc.stockOf(r.id))} ${r.unit || ""}`,
+    _price: packsOf(r).length ? packsOf(r).map((k) => `${k.name} ${k.price === "" || k.price == null ? "–" : money(k.price)}`).join(" · ") : r.salePrice === "" || r.salePrice == null ? "" : money(r.salePrice),
     _web: isListed(r) ? WEB_LABEL[websiteStock(r)] : "Not listed",
   }),
   // New products get their id up front so photos can be uploaded before the first save.
   defaults: () => ({ id: uid(), displayOrder: nextOrder() }),
   beforeSave: (rec) => {
+    // Pack sizes: drop empty rows; the rest need a name and how much stock they use
+    rec.packs = (rec.packs || []).filter((k) => k.name || k.size || k.price);
+    if (rec.packs.some((k) => !k.name || !(Number(k.size) > 0))) { toast("Each pack size needs a name and how much stock it uses", "error"); return null; }
+    const names = rec.packs.map((k) => k.name.toLowerCase());
+    if (new Set(names).size !== names.length) { toast("Two pack sizes have the same name", "error"); return null; }
     if (rec.published && !rec.webCategory) { toast("Choose a website category", "error"); return null; }
     if (rec.published && (rec.displayOrder === "" || rec.displayOrder == null)) rec.displayOrder = nextOrder();
     return rec;

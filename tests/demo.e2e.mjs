@@ -150,6 +150,45 @@ for (const vp of [{ width: 1280, height: 860 }, { width: 390, height: 844 }]) {
   await page.screenshot({ path: `${OUT}/product-tabs-${tag}.png` });
   await page.click('[data-ftab="category"][data-v=""]');
 
+  // Pack sizes: one stock in kg, sold loose and as 25 kg bags
+  await page.goto(BASE + "#/products");
+  await page.waitForSelector("tr[data-id]");
+  const pelletRow = async () => page.$$eval("tr[data-id]", (t) => t.map((x) => x.textContent).find((x) => x.includes("Mush Pellet")) || "");
+  check((await pelletRow()).includes("120 kg"), `${tag}: Mush Pellet starts with 120 kg`);
+  await page.click('tr[data-id]:has-text("Mush Pellet")');
+  await page.waitForSelector(".modal .pack-row");
+  check((await page.$$(".modal .pack-row")).length === 2, `${tag}: product form lists its 2 pack sizes`);
+  await page.screenshot({ path: `${OUT}/packs-form-${tag}.png`, fullPage: true });
+  await page.click(".modal [data-close]");
+  await page.waitForSelector(".modal-wrap.show", { state: "detached" });
+  await page.goto(BASE + "#/orders/new");
+  await page.waitForSelector("[data-save]");
+  await page.selectOption('.line[data-i="0"] [data-f="productId"]', { label: "Mush Pellet – Bag (25 kg)" });
+  await page.fill('.line[data-i="0"] [data-f="qty"]', "2");
+  await page.press('.line[data-i="0"] [data-f="qty"]', "Tab");
+  await page.click("[data-addline]");
+  await page.selectOption('.line[data-i="1"] [data-f="productId"]', { label: "Mush Pellet – Loose (1 kg)" });
+  await page.fill('.line[data-i="1"] [data-f="qty"]', "10");
+  await page.press('.line[data-i="1"] [data-f="qty"]', "Tab");
+  await page.waitForTimeout(150);
+  check((await page.textContent(".totals .grand")).includes("2,090.00"), `${tag}: 2 bags × ₹850 + 10 kg × ₹39`);
+  await page.click("[data-save]");
+  await page.waitForSelector('a[href^="#/sales/new?order="]');
+  await page.goto(BASE + "#/products");
+  await page.waitForSelector("tr[data-id]");
+  check((await pelletRow()).includes("120 kg"), `${tag}: order alone doesn't change stock`);
+  await page.goBack();
+  await page.waitForSelector('a[href^="#/sales/new?order="]');
+  await page.click('a[href^="#/sales/new?order="]');
+  await page.waitForSelector("[data-order]");
+  await page.click("[data-save]");
+  await page.waitForSelector(".paper");
+  const paper = await page.textContent(".paper");
+  check(paper.includes("Mush Pellet – Bag (25 kg)") && paper.includes("Mush Pellet – Loose (1 kg)") && paper.includes("2,090.00"), `${tag}: invoice names each pack size`);
+  await page.goto(BASE + "#/products");
+  await page.waitForSelector("tr[data-id]");
+  check((await pelletRow()).includes("60 kg"), `${tag}: invoice takes 2 × 25 + 10 = 60 kg off one stock (${(await pelletRow()).replace(/\s+/g, " ")})`);
+
   // Stock shows what's on order
   await page.goto(BASE + "#/stock");
   await page.waitForSelector("tr[data-id]");

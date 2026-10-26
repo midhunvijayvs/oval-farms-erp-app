@@ -3,6 +3,7 @@
 // different users can't make counts drift.
 import { store } from "./store.js";
 import { round2, sum, today, addDays } from "./util.js";
+import { sizeOf } from "./packs.js";
 
 export const SALE_COUNTS = ["Confirmed", "Delivered"];
 
@@ -57,11 +58,11 @@ export function movements() {
     }
     for (const s of store.all("sales")) {
       if (!saleCounts(s)) continue;
-      for (const l of s.lines || []) if (l.itemId) out.push({ date: s.date, itemId: l.itemId, qty: -(Number(l.qty) || 0), type: "Sold", ref: s.number, link: "#/sales/" + s.id });
+      for (const l of s.lines || []) if (l.itemId) out.push({ date: s.date, itemId: l.itemId, qty: -(Number(l.qty) || 0) * sizeOf(l), type: "Sold", ref: s.number, link: "#/sales/" + s.id });
     }
     for (const p of store.all("purchases")) {
       if (!purchaseCounts(p)) continue;
-      for (const l of p.lines || []) if (l.itemId) out.push({ date: p.date, itemId: l.itemId, qty: Number(l.qty) || 0, type: "Purchased", ref: p.number, link: "#/purchases/" + p.id });
+      for (const l of p.lines || []) if (l.itemId) out.push({ date: p.date, itemId: l.itemId, qty: (Number(l.qty) || 0) * sizeOf(l), type: "Purchased", ref: p.number, link: "#/purchases/" + p.id });
     }
     for (const a of store.all("adjustments")) {
       out.push({ date: a.date, itemId: a.itemId, qty: Number(a.qty) || 0, type: a.reason || "Adjustment", ref: a.notes || "", link: "#/adjustments" });
@@ -83,6 +84,7 @@ function round3(n) { return Math.round(n * 1000) / 1000; }
 
 export function stockOf(itemId) { return stockMap().get(itemId) || 0; }
 
+// Quantities are in the product's stock unit: a line for 2 bags of 25 kg counts as 50.
 // Orders that aren't cancelled and have no invoice yet: their items are promised but not yet out of stock.
 export const OPEN_ORDER = (o) => o.status !== "cancelled" && !o.invoiceId;
 
@@ -91,7 +93,7 @@ export function reservedMap() {
     const m = new Map();
     for (const o of store.all("orders")) {
       if (!OPEN_ORDER(o)) continue;
-      for (const li of o.items || []) if (li.productId) m.set(li.productId, round3((m.get(li.productId) || 0) + (Number(li.qty) || 0)));
+      for (const li of o.items || []) if (li.productId) m.set(li.productId, round3((m.get(li.productId) || 0) + (Number(li.qty) || 0) * sizeOf(li, "productId")));
     }
     return m;
   });

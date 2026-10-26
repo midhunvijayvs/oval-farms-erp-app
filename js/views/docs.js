@@ -9,6 +9,14 @@ import * as calc from "../calc.js";
 import { openForm } from "./crud.js";
 import { navigate } from "../router.js";
 import { orderNo, addressText } from "./orders.js";
+import { sellables, findPack, sellName, keyOf, splitKey } from "../packs.js";
+
+// "Mush pellet – Bag (25 kg)" for a line sold by pack, else the product name
+export function lineName(l, product) {
+  if (!product) return l.description || "Item";
+  const k = findPack(product, l.packId);
+  return k ? sellName(product, k) : l.packName ? `${product.name} – ${l.packName}` : product.name;
+}
 
 export const DOCS = {
   sales: {
@@ -117,7 +125,9 @@ export function docEditor(kind) {
           const gst = Number(it ? it.gstRate : 0) || 0;
           // Order prices include GST; the invoice shows the price before GST and adds it back.
           const rate = gst ? Math.round((Number(li.price) || 0) / (1 + gst / 100) * 10000) / 10000 : Number(li.price) || 0;
-          return it ? { itemId: it.id, qty: Number(li.qty) || 1, rate, gstRate: String(gst) } : { description: li.name || "Item", qty: Number(li.qty) || 1, rate, gstRate: "0" };
+          const k = it ? findPack(it, li.packId) : null;
+          const pack = k ? { packId: k.id, packName: k.name, size: Number(li.size) || Number(k.size) } : li.packId ? { packId: li.packId, size: Number(li.size) || 1 } : {};
+          return it ? { itemId: it.id, ...pack, qty: Number(li.qty) || 1, rate, gstRate: String(gst) } : { description: li.name || "Item", qty: Number(li.qty) || 1, rate, gstRate: "0" };
         });
         doc.shipping = Number(o.deliveryCharge) || "";
         doc.notes = [`Order ${orderNo(o)}${o.channel === "online" ? " (ovalfarm.in)" : o.source ? " (" + o.source + ")" : ""}`, o.note, addressText(o.address) ? "Deliver to: " + addressText(o.address) : ""].filter(Boolean).join("\n");
@@ -130,19 +140,23 @@ export function docEditor(kind) {
       if (!doc.lines || !doc.lines.length) doc.lines = [{ qty: 1 }];
       const stockNow = calc.stockMap();
 
-      const itemOptions = (sel) => `<option value="">Select item…</option>${items.map((i) => `<option value="${i.id}" ${i.id === sel ? "selected" : ""}>${esc(i.name)}</option>`).join("")}`;
+      // Each product, or each of its pack sizes, is one choice: value "productId" or "productId|packId"
+      const choices = sellables(items);
+      const itemOptions = (sel) => `<option value="">Select item…</option>${choices.map((c) => `<option value="${esc(c.key)}" ${c.key === sel ? "selected" : ""}>${esc(c.name)}</option>`).join("")}`;
       const lineRow = (l, idx) => {
         const it = items.find((i) => i.id === l.itemId);
+        const k = it ? findPack(it, l.packId) : null;
+        const size = Number(l.size) || (k ? Number(k.size) : 1);
         const c = calc.lineCalc(l);
         const avail = it ? stockNow.get(it.id) || 0 : null;
-        const warn = kind === "sales" && it && Number(l.qty) > avail;
+        const warn = kind === "sales" && it && Number(l.qty) * size > avail;
         return `<div class="line" data-i="${idx}">
           <div class="line-item">
-            <select data-f="itemId">${itemOptions(l.itemId)}</select>
+            <select data-f="itemId">${itemOptions(keyOf(l.itemId, l.packId))}</select>
             <input data-f="description" placeholder="Description (optional)" value="${esc(l.description || "")}">
-            ${it ? `<small class="${warn ? "text-warn" : "muted"}">In stock: ${num(avail)} ${esc(it.unit || "")}${warn ? " · not enough stock" : ""}</small>` : ""}
+            ${it ? `<small class="${warn ? "text-warn" : "muted"}">In stock: ${num(avail)} ${esc(it.unit || "")}${k ? ` (${num(Math.floor(avail / size))} × ${esc(k.name)})` : ""}${warn ? " · not enough stock" : ""}</small>` : ""}
           </div>
-          <label class="line-num"><span>Qty${it ? " (" + esc(it.unit || "") + ")" : ""}</span><input data-f="qty" type="number" inputmode="decimal" step="any" value="${esc(l.qty ?? "")}"></label>
+          <label class="line-num"><span>Qty${it ? " (" + esc(k ? k.name : it.unit || "") + ")" : ""}</span><input data-f="qty" type="number" inputmode="decimal" step="any" value="${esc(l.qty ?? "")}"></label>
           <label class="line-num"><span>Rate</span><input data-f="rate" type="number" inputmode="decimal" step="0.01" value="${esc(l.rate ?? "")}"></label>
           <label class="line-num sm"><span>Disc %</span><input data-f="discount" type="number" inputmode="decimal" step="any" value="${esc(l.discount ?? "")}"></label>
           <label class="line-num sm"><span>GST %</span><select data-f="gstRate">${["0", "5", "12", "18", "28"].map((g) => `<option ${String(l.gstRate ?? "0") === g ? "selected" : ""}>${g}</option>`).join("")}</select></label>
@@ -222,14 +236,20 @@ export function docEditor(kind) {
             readHeader();
             const f = el.dataset.f;
             const l = doc.lines[i];
-            l[f] = el.type === "number" ? (el.value === "" ? "" : Number(el.value)) : el.value;
             if (f === "itemId") {
-              const it = items.find((x) => x.id === el.value);
+              const { productId, packId } = splitKey(el.value);
+              const it = items.find((x) => x.id === productId);
+              const k = it ? findPack(it, packId) : null;
+              l.itemId = productId;
+              delete l.packId; delete l.packName; delete l.size;
+              if (k) Object.assign(l, { packId: k.id, packName: k.name, size: Number(k.size) });
               if (it) {
-                if (it[D.priceKey] !== undefined && it[D.priceKey] !== "") l.rate = Number(it[D.priceKey]);
+                // Sales: the pack's own price. Purchases: cost per unit × units in the pack.
+                const price = isSale ? (k ? k.price : it.salePrice) : it.costPrice === "" || it.costPrice == null ? "" : Number(it.costPrice) * (k ? Number(k.size) : 1);
+                if (price !== undefined && price !== "" && price !== null) l.rate = Number(price);
                 l.gstRate = String(it.gstRate || "0");
               }
-            }
+            } else l[f] = el.type === "number" ? (el.value === "" ? "" : Number(el.value)) : el.value;
             draw();
             const again = root.querySelector(`.line[data-i="${i}"] [data-f="${f === "itemId" ? "qty" : f}"]`);
             if (again && f !== "gstRate") again.focus();
@@ -377,8 +397,8 @@ export function docView(kind) {
               <tbody>${(doc.lines || []).map((l, i) => {
                 const it = items.get(l.itemId) || {};
                 const c = calc.lineCalc(l);
-                return `<tr><td>${i + 1}</td><td><b>${esc(it.name || l.description || "Item")}</b>${it.name && l.description ? `<br><small>${esc(l.description)}</small>` : ""}${l.discount ? `<br><small>Discount ${l.discount}%</small>` : ""}</td><td>${esc(it.hsn || "")}</td>
-                  <td class="r">${num(l.qty)} ${esc(it.unit || "")}</td><td class="r">${money(l.rate)}</td><td class="r">${money(c.taxable)}</td><td class="r">${l.gstRate || 0}%</td><td class="r">${money(c.total)}</td></tr>`;
+                return `<tr><td>${i + 1}</td><td><b>${esc(lineName(l, items.get(l.itemId)))}</b>${it.name && l.description ? `<br><small>${esc(l.description)}</small>` : ""}${l.discount ? `<br><small>Discount ${l.discount}%</small>` : ""}</td><td>${esc(it.hsn || "")}</td>
+                  <td class="r">${num(l.qty)} ${esc(l.packId ? "" : it.unit || "")}</td><td class="r">${money(l.rate)}</td><td class="r">${money(c.taxable)}</td><td class="r">${l.gstRate || 0}%</td><td class="r">${money(c.total)}</td></tr>`;
               }).join("")}</tbody>
             </table>
             <div class="paper-foot">
@@ -436,7 +456,7 @@ export function docView(kind) {
         navigate("#/" + D.route, true);
       });
       if (q("[data-wa]")) q("[data-wa]").addEventListener("click", () => {
-        const lines = (doc.lines || []).map((l) => `• ${(items.get(l.itemId) || {}).name || l.description || "Item"} × ${num(l.qty)} = ${money(calc.lineCalc(l).total)}`);
+        const lines = (doc.lines || []).map((l) => `• ${lineName(l, items.get(l.itemId))} × ${num(l.qty)} = ${money(calc.lineCalc(l).total)}`);
         const text = [`*${biz.name || "Oval Farms"}*`, `Invoice ${doc.number} · ${fmtDate(doc.date)}`, ...lines, `*Total: ${money(t.total)}*`, balance > 0 && paid ? `Balance due: ${money(balance)}` : "", biz.upi ? `Pay by UPI: ${biz.upi}` : "", "Thank you!"].filter(Boolean).join("\n");
         const phone = party && party.phone ? party.phone.replace(/\D/g, "") : "";
         const ph = phone.length === 10 ? "91" + phone : phone;
