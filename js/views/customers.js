@@ -103,8 +103,15 @@ function loginPanel(c) {
   return `<div class="form-extra login-panel"><div class="card-head"><h3>${icon("link")}Website login ${chip(status)}</h3></div>${body}</div>`;
 }
 
+// The address typed in the ERP, or the first delivery address saved on ovalfarm.in
+const addressOf = (r) => {
+  if (r.address) return String(r.address).replace(/\s*\n\s*/g, ", ");
+  const a = Array.isArray(r.addresses) && r.addresses[0];
+  return a ? [a.line1, a.line2, a.landmark, a.city, a.district, a.state, a.pincode].filter(Boolean).join(", ") : "";
+};
+
 export const customerHooks = {
-  decorate: (r) => ({ ...r, _balance: calc.customerBalance(r.id), _login: loginStatus(r) }),
+  decorate: (r) => ({ ...r, _balance: calc.customerBalance(r.id), _login: loginStatus(r), _address: addressOf(r) }),
   defaults: () => ({ channel: "offline" }),
   formExtra: (r) => (r.id && store.get("customers", r.id) ? loginPanel(r) : ""),
   formMount: ({ el, rec, close }) => {
