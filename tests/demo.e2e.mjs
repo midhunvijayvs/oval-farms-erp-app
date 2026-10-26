@@ -137,6 +137,19 @@ for (const vp of [{ width: 1280, height: 860 }, { width: 390, height: 844 }]) {
   const row = await page.$$eval("tr[data-id]", (trs) => trs.map((t) => t.textContent).find((x) => x.includes("Meera Das")) || "");
   check(row.includes("Offline") && row.includes("Invited"), `${tag}: new customer is offline and invited (${row})`);
 
+  // Type tabs on customers, category tabs on products
+  await page.click('[data-ftab="type"][data-v="Wholesale"]');
+  check((await page.$$eval("tr[data-id]", (t) => t.map((x) => x.textContent))).every((x) => x.includes("Wholesale")), `${tag}: customer Type tab filters the list`);
+  await page.click('[data-ftab="type"][data-v=""]');
+  await page.goto(BASE + "#/products");
+  await page.waitForSelector('[data-ftab="category"]');
+  await page.click('[data-ftab="category"][data-v="Raw Material"]');
+  const cats = await page.$$eval("tr[data-id]", (t) => t.map((x) => x.textContent));
+  check(cats.length > 0 && cats.every((x) => x.includes("Raw Material")), `${tag}: product category tab filters the list`);
+  check(!(await page.$("select[data-filter]")), `${tag}: no category dropdown on products`);
+  await page.screenshot({ path: `${OUT}/product-tabs-${tag}.png` });
+  await page.click('[data-ftab="category"][data-v=""]');
+
   // Stock shows what's on order
   await page.goto(BASE + "#/stock");
   await page.waitForSelector("tr[data-id]");

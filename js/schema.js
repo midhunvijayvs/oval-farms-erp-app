@@ -77,7 +77,7 @@ export const schemas = {
     ],
     search: ["name", "sku", "category", "hsn", "webCategory"],
     sort: (a, b) => a.name.localeCompare(b.name),
-    filters: [{ k: "category", list: "itemCategories" }],
+    filters: [{ k: "category", list: "itemCategories", tabs: true }],
   },
 
   customers: {
@@ -106,7 +106,7 @@ export const schemas = {
     ],
     search: ["name", "phone", "email", "gstin", "type", "_address"],
     sort: (a, b) => String(a.name || "").localeCompare(String(b.name || "")),
-    filters: [{ k: "channel", options: [{ v: "online", l: "Online" }, { v: "offline", l: "Offline" }] }],
+    filters: [{ k: "type", list: "customerTypes", tabs: true }, { k: "channel", allLabel: "Online and offline", options: [{ v: "online", l: "Online" }, { v: "offline", l: "Offline" }] }],
   },
 
   suppliers: {
