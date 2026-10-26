@@ -146,19 +146,27 @@ export function listView(key, opts = {}) {
     render(root) {
       const sc = schemas[key];
       const h = hooks[key] || {};
-      const st = state[key] || (state[key] = { q: "", filter: "", from: "", to: "" });
+      const st = state[key] || (state[key] = { q: "", f: {}, from: "", to: "" });
       let rows = store.all(key);
       if (h.decorate) rows = rows.map(h.decorate);
       if (st.q) {
         const q = st.q.toLowerCase();
         rows = rows.filter((r) => (sc.search || []).some((k) => String(r[k] || "").toLowerCase().includes(q)) || (r._party || "").toLowerCase().includes(q));
       }
-      const f = sc.filters && sc.filters[0];
-      if (f && st.filter) rows = rows.filter((r) => String(r[f.k]) === st.filter);
       if (sc.dateKey && (st.from || st.to)) rows = rows.filter((r) => inRange(r[sc.dateKey], st.from, st.to));
+      // Filters: { k, list | options, tabs } — tabs show as a tab bar with counts, the rest as dropdowns
+      const filters = (sc.filters || []).map((f) => ({ ...f, options: (f.options || list(f.list)).map((o) => (typeof o === "object" ? o : { v: o, l: o })) }));
+      const keep = (r, skip) => filters.every((f) => f === skip || !st.f[f.k] || String(r[f.k]) === st.f[f.k]);
+      const tabs = filters.filter((f) => f.tabs).map((f) => {
+        const base = rows.filter((r) => keep(r, f));
+        const count = (v) => base.filter((r) => String(r[f.k]) === String(v)).length;
+        return `<div class="tabs list-tabs" role="tablist">${[{ v: "", l: "All" }, ...f.options].map((o) => {
+          const on = String(o.v) === (st.f[f.k] || "");
+          return `<button class="tab ${on ? "on" : ""}" role="tab" aria-selected="${on}" data-ftab="${esc(f.k)}" data-v="${esc(o.v)}">${esc(o.l)} <span class="tab-count">${o.v === "" ? base.length : count(o.v)}</span></button>`;
+        }).join("")}</div>`;
+      }).join("");
+      rows = rows.filter((r) => keep(r));
       rows.sort(sc.sort);
-
-      const options = f ? (f.options || list(f.list)).map((o) => (typeof o === "object" ? o : { v: o, l: o })) : [];
 
       const totalHtml = sc.total ? `<div class="list-total">Total <b>${money(sum(rows, (r) => r[sc.total]))}</b> · ${rows.length} entries</div>` : `<div class="list-total muted">${rows.length} ${rows.length === 1 ? "entry" : "entries"}</div>`;
 
@@ -168,9 +176,10 @@ export function listView(key, opts = {}) {
           <button class="btn btn-ghost hide-sm" data-export>${icon("download")}Export</button>
           ${can("write") ? `<button class="btn btn-primary new-btn" data-new>${icon("plus")}New ${esc(sc.singular.toLowerCase())}</button>` : ""}`)}
         ${opts.banner ? opts.banner() : ""}${h.banner ? h.banner() : ""}
+        ${tabs}
         <div class="toolbar">
           <div class="search">${icon("search")}<input type="search" placeholder="Search ${esc(sc.title.toLowerCase())}…" value="${esc(st.q)}" data-q></div>
-          ${f ? `<select data-filter><option value="">All</option>${options.map((o) => `<option value="${esc(o.v)}" ${String(o.v) === st.filter ? "selected" : ""}>${esc(o.l)}</option>`).join("")}</select>` : ""}
+          ${filters.filter((f) => !f.tabs).map((f) => `<select data-filter="${esc(f.k)}"><option value="">${esc(f.allLabel || "All")}</option>${f.options.map((o) => `<option value="${esc(o.v)}" ${String(o.v) === (st.f[f.k] || "") ? "selected" : ""}>${esc(o.l)}</option>`).join("")}</select>`).join("")}
           ${sc.dateKey ? `<div class="range"><input type="date" value="${esc(st.from)}" data-from aria-label="From"><span>–</span><input type="date" value="${esc(st.to)}" data-to aria-label="To"></div>
             <div class="seg"><button data-preset="month" class="${st.from === monthStart() && st.to === "" ? "on" : ""}">This month</button><button data-preset="all" class="${!st.from && !st.to ? "on" : ""}">All</button></div>` : ""}
         </div>
@@ -185,8 +194,9 @@ export function listView(key, opts = {}) {
         rerender();
         const inp = root.querySelector("[data-q]"); inp.focus(); inp.setSelectionRange(pos, pos);
       });
-      const fs = root.querySelector("[data-filter]");
-      if (fs) fs.addEventListener("change", (e) => { st.filter = e.target.value; rerender(); });
+      root.querySelectorAll("[data-filter]").forEach((sel) => sel.addEventListener("change", () => { st.f[sel.dataset.filter] = sel.value; rerender(); }));
+      root.querySelectorAll("[data-ftab]").forEach((b) => b.addEventListener("click", () => { st.f[b.dataset.ftab] = b.dataset.v; rerender(); }));
+      root.querySelectorAll(".list-tabs .tab.on").forEach((t) => t.scrollIntoView({ block: "nearest", inline: "nearest" }));
       const fr = root.querySelector("[data-from]"), to = root.querySelector("[data-to]");
       if (fr) fr.addEventListener("change", (e) => { st.from = e.target.value; rerender(); });
       if (to) to.addEventListener("change", (e) => { st.to = e.target.value; rerender(); });
