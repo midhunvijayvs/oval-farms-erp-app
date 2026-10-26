@@ -3,6 +3,8 @@
 import { store } from "./store.js";
 import { today } from "./util.js";
 
+const hasPacks = (r) => Array.isArray(r.packs) && r.packs.length > 0;
+
 // Editable dropdown lists (Settings > Lists). Defaults suit a mushroom + value-added foods unit.
 export const DEFAULT_LISTS = {
   itemCategories: ["Fresh Mushroom", "Value-Added Product", "Raw Material", "Packaging", "Consumable"],
@@ -50,7 +52,7 @@ export const schemas = {
       { k: "active", label: "Active", type: "checkbox", default: true },
       { k: "notes", label: "Notes (staff only)", type: "textarea" },
       { k: "_packs", label: "Pack sizes", type: "heading" },
-      { k: "packs", label: "Sell from the same stock in different sizes, e.g. Loose (1 kg) and Bag (25 kg). Each pack has its own price and shows as its own product on ovalfarm.in. Leave empty to sell it as it is, by the stock unit at the selling price.", type: "packs" },
+      { k: "packs", label: "Sell from the same stock in different sizes, e.g. Loose (1 kg) and Bag (25 kg). Each pack has its own price (including GST) and shows as its own product on ovalfarm.in. Leave empty to sell it as it is, by the stock unit at the selling price.", type: "packs" },
       { k: "_web", label: "On the website (ovalfarm.in)", type: "heading" },
       { k: "published", label: "Show on ovalfarm.in", type: "checkbox", default: false },
       { k: "webCategory", label: "Website category", type: "select", list: "websiteCategories", half: true, showIf: (r) => r.published },
@@ -58,10 +60,10 @@ export const schemas = {
       { k: "images", label: "Photos (the first one is the main photo)", type: "images", showIf: (r) => r.published },
       { k: "shortDescription", label: "Short description (shown on cards)", type: "text", showIf: (r) => r.published },
       { k: "description", label: "Full description", type: "textarea", rows: 4, showIf: (r) => r.published },
-      { k: "mrp", label: "MRP (shown struck through when higher than the price)", type: "money", half: true, showIf: (r) => r.published },
+      { k: "mrp", label: "MRP (shown struck through when higher than the price)", type: "money", half: true, showIf: (r) => r.published && !hasPacks(r) },
       { k: "badge", label: "Badge on the photo", type: "text", half: true, placeholder: "e.g. New, Fresh", showIf: (r) => r.published },
-      { k: "netQuantity", label: "Pack size", type: "number", half: true, placeholder: "e.g. 25", showIf: (r) => r.published },
-      { k: "netUnit", label: "Pack size unit", type: "select", options: ["g", "kg", "ml", "l", "nos", "pack", "bed"], half: true, showIf: (r) => r.published },
+      { k: "netQuantity", label: "Net quantity on the label", type: "number", half: true, placeholder: "e.g. 25", showIf: (r) => r.published && !hasPacks(r) },
+      { k: "netUnit", label: "Net quantity unit", type: "select", options: ["g", "kg", "ml", "l", "nos", "pack", "bed"], half: true, showIf: (r) => r.published && !hasPacks(r) },
       { k: "highlights", label: "Highlights (one per line)", type: "lines", showIf: (r) => r.published },
       { k: "howToUse", label: "How to use (one step per line)", type: "textarea", rows: 3, showIf: (r) => r.published },
       { k: "storageInfo", label: "Storage", type: "text", showIf: (r) => r.published },
