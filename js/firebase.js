@@ -16,7 +16,7 @@ const cfg = window.OVAL_CONFIG || {};
 export const COLLECTIONS = [
   "settings", "staff", "products", "catalog", "customers", "customerInvites", "orders",
   "batches", "harvests", "productions", "adjustments", "sales", "purchases", "suppliers",
-  "expenses", "payments", "employees", "attendance", "tasks",
+  "expenses", "payments", "employees", "attendance", "tasks", "delivery",
 ];
 const TIME_FIELDS = new Set(["createdAt", "updatedAt"]);
 

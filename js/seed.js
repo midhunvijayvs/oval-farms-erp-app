@@ -1,8 +1,12 @@
 // Sample data for demo mode, dated relative to today so the dashboard looks alive.
 import { store } from "./store.js";
+import { seedDeliveryZones } from "./delivery.js";
 import { today, addDays } from "./util.js";
 
 export function seedDemo() {
+  seedDeliveryZones();
+  for (const [id, perKg, freeAbove] of [["z1", 10, 500], ["z2", 15, 900], ["z3", 20, 1500], ["z4", 30, 2500], ["z5", 45, 5000], ["z6", 60, 8000], ["z7", 90, 0]]) store.put("delivery", { id, perKg, freeAbove });
+
   const d = (n) => addDays(today(), n);
   const put = (c, r) => store.put(c, r);
   const ym = today().slice(2, 4) + today().slice(5, 7);
@@ -41,8 +45,8 @@ export function seedDemo() {
     ["hotel", { name: "Hotel Green Leaf", type: "Restaurant / Hotel", phone: "9847000002", address: "Thrissur", creditDays: 7 }],
     ["veg", { name: "Anand Vegetables", type: "Wholesale", phone: "9847000003", address: "Ernakulam Market" }],
     ["organic", { name: "Organic Basket", type: "Retail", phone: "9847000004", email: "orders@organicbasket.example", creditDays: 30, uid: "demo-uid-organic", accountStatus: "invited", invitedAt: new Date().toISOString() }],
-    ["anjali", { name: "Anjali Menon", type: "Retail", phone: "+91 98470 11223", email: "anjali@example.com", channel: "online", uid: "demo-uid-anjali", accountStatus: "active", lastLoginAt: new Date().toISOString(), addresses: [{ line1: "House 12, Temple Road", city: "Kochi", pincode: "682001" }] }],
-    ["rahul", { name: "Rahul Nair", type: "Retail", phone: "+91 94460 22334", email: "rahul@example.com", channel: "online", uid: "demo-uid-rahul", accountStatus: "active", addresses: [{ line1: "Rose Villa, Round North", city: "Thrissur", pincode: "680001" }] }],
+    ["anjali", { name: "Anjali Menon", type: "Retail", phone: "+91 98470 11223", email: "anjali@example.com", channel: "online", uid: "demo-uid-anjali", accountStatus: "active", lastLoginAt: new Date().toISOString(), addrLine1: "House 12, Temple Road", addrCity: "Kochi", addrPincode: "682001", mapUrl: "https://maps.google.com/?q=9.9312,76.2673" }],
+    ["rahul", { name: "Rahul Nair", type: "Retail", phone: "+91 94460 22334", email: "rahul@example.com", channel: "online", uid: "demo-uid-rahul", accountStatus: "active", addrLine1: "Rose Villa, Round North", addrCity: "Thrissur", addrPincode: "680001" }],
   ]) C[k] = put("customers", { channel: "offline", uid: null, accountStatus: "none", ...v }).id;
   put("customerInvites", { id: C.organic, email: "orders@organicbasket.example", tempPassword: "Mango-4821" });
 

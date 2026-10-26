@@ -19,8 +19,10 @@ import { reportsView } from "./views/reports.js";
 import { settingsView, applyTheme } from "./views/settings.js";
 import { seedDemo } from "./seed.js";
 import { seedWebsiteProducts } from "./seed-products.js";
+import { seedDeliveryZones } from "./delivery.js";
+import { deliveryView } from "./views/delivery.js";
 
-window.OVAL_VERSION = "2.0.8";
+window.OVAL_VERSION = "2.0.9";
 const cfg = window.OVAL_CONFIG || {};
 const LS = {
   get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },
@@ -47,6 +49,9 @@ const NAV = [
     { href: "#/orders", label: "Orders", ic: "cart", badge: "orders" },
     { href: "#/sales", label: "Invoices", ic: "file" },
     { href: "#/customers", label: "Customers", ic: "users" },
+  ] },
+  { section: "Delivery", items: [
+    { href: "#/delivery", label: "Pincodes & charges", ic: "truck" },
   ] },
   { section: "Purchases", perm: "finance", items: [
     { href: "#/purchases", label: "Purchase Bills", ic: "bag" },
@@ -109,6 +114,7 @@ function setupRoutes() {
   // Old addresses from before products and customers were merged.
   route("/items", { title: "", render() { navigate("#/products", true); } });
   route("/web-customers", { title: "", render() { navigate("#/customers", true); } });
+  route("/delivery", deliveryView);
   route("/reports", reportsView, { allow: () => can("reports") });
   route("/settings", settingsView);
 }
@@ -183,6 +189,10 @@ async function afterSignIn(user) {
   if (can("admin") && !store.all("products").length) {
     const n = seedWebsiteProducts();
     if (n) toast(`Added the ${n} products from ovalfarm.in to Products & Materials`);
+  }
+  if (can("admin")) {
+    const z = seedDeliveryZones();
+    if (z) toast("Delivery ranges added under Delivery → Pincodes & charges");
   }
   mountShell();
 }

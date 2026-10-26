@@ -10,6 +10,7 @@ import { navigate } from "../router.js";
 import { openForm } from "./crud.js";
 import * as calc from "../calc.js";
 import { sellables, findPack, keyOf, splitKey, packsOf } from "../packs.js";
+import { mapOf, mapLink, customerAddress } from "./customers.js";
 
 export const ORDER_STATUSES = [
   { k: "placed", label: "New", tone: "warn" },
@@ -126,7 +127,7 @@ export const orderDetailView = {
           <div class="kv-row"><span>Name</span><b>${esc(customerName(o))}</b></div>
           ${c.phone ? `<div class="kv-row"><span>Phone</span><span><a href="tel:${esc(c.phone)}">${esc(c.phone)}</a>${tel ? ` · <a href="https://wa.me/91${tel}" target="_blank" rel="noopener">${icon("whatsapp")}WhatsApp</a>` : ""}</span></div>` : ""}
           ${c.email ? `<div class="kv-row"><span>Email</span><a href="mailto:${esc(c.email)}">${esc(c.email)}</a></div>` : ""}
-          ${addressText(o.address) ? `<div class="kv-row"><span>Deliver to</span><span class="r">${esc(addressText(o.address))}</span></div>` : ""}
+          ${addressText(o.address) ? `<div class="kv-row"><span>Deliver to</span><span class="r">${esc(addressText(o.address))}${mapOf(o.address) ? `<br>${mapLink(mapOf(o.address))}` : ""}</span></div>` : ""}
           ${o.note ? `<div class="kv-row"><span>Customer note</span><span class="r">${esc(o.note)}</span></div>` : ""}
           <div class="kv-row"><span>Payment</span><span>${esc((PAYMENTS.find((p) => p.v === o.payment) || { l: o.payment || "" }).l)}</span></div>
         </div>
@@ -262,7 +263,7 @@ export const orderEditor = {
       const c = store.get("customers", o.customerId);
       o.customer = c ? { name: c.name || "", phone: c.phone || "", email: c.email || "" } : { name: "", phone: (o.customer && o.customer.phone) || "" };
       if (!addressTouched) {
-        const a = c ? (c.address || (Array.isArray(c.addresses) && c.addresses[0]) || "") : "";
+        const a = c ? (customerAddress(c) || c.address || (Array.isArray(c.addresses) && c.addresses[0]) || "") : "";
         o.address = a ? (typeof a === "string" ? { line1: a } : a) : null;
         o.addressText = addressText(o.address);
       }

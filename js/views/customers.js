@@ -103,17 +103,32 @@ function loginPanel(c) {
   return `<div class="form-extra login-panel"><div class="card-head"><h3>${icon("link")}Website login ${chip(status)}</h3></div>${body}</div>`;
 }
 
-// The address typed in the ERP, or the first delivery address saved on ovalfarm.in
-const addressOf = (r) => {
-  if (r.address) return String(r.address).replace(/\s*\n\s*/g, ", ");
+// The delivery address, whether it was typed here or saved by the customer on ovalfarm.in.
+// Older website records kept it in addresses[0]; those are still read.
+export const addressOf = (r) => {
+  const flat = [r.addrLine1, r.addrLine2, r.addrLandmark, r.addrCity, r.addrPincode].filter(Boolean).join(", ");
+  if (flat) return flat;
   const a = Array.isArray(r.addresses) && r.addresses[0];
-  return a ? [a.line1, a.line2, a.landmark, a.city, a.district, a.state, a.pincode].filter(Boolean).join(", ") : "";
+  const old = a ? [a.line1, a.line2, a.landmark, a.city, a.district, a.state, a.pincode].filter(Boolean).join(", ") : "";
+  return old || String(r.address || "").replace(/\s*\n\s*/g, ", ");
 };
+
+// The delivery address as an order keeps it
+export const customerAddress = (c) => {
+  if (!c) return null;
+  const a = { line1: c.addrLine1 || "", line2: c.addrLine2 || "", landmark: c.addrLandmark || "", city: c.addrCity || "", pincode: c.addrPincode || "", mapUrl: c.mapUrl || "" };
+  return a.line1 || a.city || a.pincode ? a : null;
+};
+
+export const mapOf = (r) => (r && typeof r.mapUrl === "string" && /^https?:\/\//i.test(r.mapUrl) ? r.mapUrl : "");
+
+// "Open in Google Maps", for a customer or an order address
+export const mapLink = (url) => (url ? `<a class="btn btn-ghost btn-sm" href="${esc(url)}" target="_blank" rel="noopener">${icon("link")}Open in Google Maps</a>` : "");
 
 export const customerHooks = {
   decorate: (r) => ({ ...r, _balance: calc.customerBalance(r.id), _login: loginStatus(r), _address: addressOf(r) }),
   defaults: () => ({ channel: "offline" }),
-  formExtra: (r) => (r.id && store.get("customers", r.id) ? loginPanel(r) : ""),
+  formExtra: (r) => `${mapOf(r) ? `<div class="form-extra"><div class="form-actions left">${mapLink(mapOf(r))}</div></div>` : ""}${r.id && store.get("customers", r.id) ? loginPanel(r) : ""}`,
   formMount: ({ el, rec, close }) => {
     const c = rec.id && store.get("customers", rec.id);
     if (!c) return;
