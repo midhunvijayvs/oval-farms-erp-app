@@ -159,6 +159,7 @@ for (const [name, size, price] of [["Small", 1, 90], ["Family", 4, 320]]) {
   await r.locator('[data-pk="size"]').fill(String(size));
   await r.locator('[data-pk="price"]').fill(String(price));
 }
+check(!(await page.isVisible(".modal [name=netQuantity]")), "the single net quantity field hides once the product has pack sizes");
 await page.click(".modal-foot .btn-primary");
 cat = await waitFor(async () => { const c = await catalog(); return c.filter((p) => p.product_id === "white-oyster-mushrooms").length === 2 ? c : null; });
 const packs = cat ? cat.filter((p) => p.product_id === "white-oyster-mushrooms") : [];

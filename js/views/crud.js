@@ -237,6 +237,7 @@ function bindPacks(form, f) {
   const draw = (packs) => {
     input.value = JSON.stringify(packs);
     box.querySelector(".pack-rows").innerHTML = packs.map((k, i) => packRow(k, i, unit())).join("");
+    form.dispatchEvent(new Event("change")); // fields that only apply without packs show or hide
   };
   box.addEventListener("input", save);
   box.addEventListener("change", save);

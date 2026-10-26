@@ -184,8 +184,8 @@ export function packRow(k, i, unit) {
   return `<div class="pack-row" data-pack="${i}">
     <label class="pack-name"><span>Pack name</span><input data-pk="name" value="${v(k.name)}" placeholder="e.g. Loose, Bag"></label>
     <label><span>Uses <b data-pack-unit>${esc(unit || "units")}</b></span><input data-pk="size" type="number" inputmode="decimal" step="any" min="0" value="${v(k.size)}" placeholder="e.g. 25"></label>
-    <label><span>Price (incl. GST)</span><input data-pk="price" type="number" inputmode="decimal" step="0.01" value="${v(k.price)}"></label>
-    <label><span>MRP</span><input data-pk="mrp" type="number" inputmode="decimal" step="0.01" value="${v(k.mrp)}"></label>
+    <label><span>Price ₹</span><input data-pk="price" type="number" inputmode="decimal" step="0.01" value="${v(k.price)}"></label>
+    <label><span>MRP ₹</span><input data-pk="mrp" type="number" inputmode="decimal" step="0.01" value="${v(k.mrp)}"></label>
     <label class="check pack-web"><input data-pk="published" type="checkbox" ${k.published === false ? "" : "checked"}><span>On ovalfarm.in</span></label>
     <button type="button" class="icon-btn" data-pack-del="${i}" aria-label="Remove pack size">${icon("trash")}</button>
   </div>`;

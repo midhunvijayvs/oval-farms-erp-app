@@ -29,6 +29,7 @@ export const productHooks = {
     // Pack sizes: drop empty rows; the rest need a name and how much stock they use
     rec.packs = (rec.packs || []).filter((k) => k.name || k.size || k.price);
     if (rec.packs.some((k) => !k.name || !(Number(k.size) > 0))) { toast("Each pack size needs a name and how much stock it uses", "error"); return null; }
+    if (rec.packs.some((k) => !(Number(k.price) > 0))) { toast("Each pack size needs a price", "error"); return null; }
     const names = rec.packs.map((k) => k.name.toLowerCase());
     if (new Set(names).size !== names.length) { toast("Two pack sizes have the same name", "error"); return null; }
     if (rec.published && !rec.webCategory) { toast("Choose a website category", "error"); return null; }
