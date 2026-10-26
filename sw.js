@@ -1,9 +1,9 @@
 // Service worker: caches the app shell so Oval Farms ERP opens instantly and works offline.
 // Business data is not cached here; it lives in Firebase, which keeps its own copy on each device.
-const VERSION = "oval-erp-v2.0.6";
+const VERSION = "oval-erp-v2.0.7";
 const SHELL = [
   "./", "./index.html", "./manifest.webmanifest", "./config.js", "./css/app.css",
-  "./assets/logo.png", "./assets/icon-192.png", "./assets/icon-512.png", "./assets/icon-maskable-512.png", "./assets/apple-touch-icon.png", "./assets/favicon-64.png",
+  "./assets/logo.png", "./assets/logo-farm.png", "./assets/icon-192.png", "./assets/icon-512.png", "./assets/icon-maskable-512.png", "./assets/apple-touch-icon.png", "./assets/favicon-64.png",
   "./js/app.js", "./js/calc.js", "./js/catalog.js", "./js/firebase.js", "./js/google.js", "./js/icons.js", "./js/idb.js", "./js/packs.js", "./js/router.js", "./js/schema.js",
   "./js/seed.js", "./js/seed-products.js", "./js/session.js", "./js/store.js", "./js/ui.js", "./js/util.js",
   "./js/views/attendance.js", "./js/views/charts.js", "./js/views/crud.js", "./js/views/customers.js", "./js/views/dashboard.js", "./js/views/docs.js", "./js/views/orders.js", "./js/views/products.js",

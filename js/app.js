@@ -20,7 +20,7 @@ import { settingsView, applyTheme } from "./views/settings.js";
 import { seedDemo } from "./seed.js";
 import { seedWebsiteProducts } from "./seed-products.js";
 
-window.OVAL_VERSION = "2.0.6";
+window.OVAL_VERSION = "2.0.7";
 const cfg = window.OVAL_CONFIG || {};
 const LS = {
   get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },
@@ -124,8 +124,8 @@ function hideSplash() {
 function authScreen(inner) {
   app.innerHTML = `<div class="auth">
     <div class="auth-card">
-      <img src="assets/logo.png" alt="Oval Farmtech" class="auth-logo">
-      <h1>Oval Farms ERP</h1>
+      <img src="assets/logo-farm.png" alt="Oval Farm" class="auth-logo">
+      <h1>ERP</h1>
       ${inner}
     </div>
     <p class="auth-foot">Your data is kept in the Oval Farms Firebase database, shared with ovalfarm.in.</p>
