@@ -367,7 +367,7 @@ export function docView(kind) {
           <article class="paper print-area">
             <header class="paper-head">
               <div class="paper-brand">
-                <img src="assets/logo.png" alt="" class="paper-logo">
+                <img src="assets/logo-farm.png" alt="" class="paper-logo">
                 <div>
                   <h2>${esc(biz.name || "Oval Farms")}</h2>
                   <p>${esc(biz.address || "").replace(/\n/g, "<br>")}</p>
