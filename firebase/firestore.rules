@@ -155,11 +155,11 @@ service cloud.firestore {
     // ---------- ERP-only records ----------
     match /{col}/{id} {
       allow read: if isStaff() && col in ['settings', 'batches', 'harvests', 'productions', 'adjustments', 'sales', 'purchases',
-                                          'suppliers', 'expenses', 'payments', 'employees', 'attendance', 'tasks'];
+                                          'suppliers', 'expenses', 'payments', 'employees', 'attendance', 'tasks', 'productGroups'];
       allow create, update: if canWrite() && col in ['batches', 'harvests', 'productions', 'adjustments', 'sales', 'purchases',
-                                          'suppliers', 'expenses', 'payments', 'employees', 'attendance', 'tasks'];
+                                          'suppliers', 'expenses', 'payments', 'employees', 'attendance', 'tasks', 'productGroups'];
       allow delete: if canDelete() && col in ['batches', 'harvests', 'productions', 'adjustments', 'sales', 'purchases',
-                                          'suppliers', 'expenses', 'payments', 'employees', 'attendance', 'tasks'];
+                                          'suppliers', 'expenses', 'payments', 'employees', 'attendance', 'tasks', 'productGroups'];
     }
     // Business profile and dropdown lists: admins and managers.
     match /settings/{id} {

@@ -9,6 +9,7 @@ import { openModal, toast } from "../ui.js";
 import * as calc from "../calc.js";
 import { isListed, websiteStock } from "../catalog.js";
 import { packsOf } from "../packs.js";
+import { openGroups } from "./groups.js";
 
 // Website details stay saved while a product is unpublished, so publishing again restores them.
 for (const f of schemas.products.fields) if (f.showIf) f.keepWhenHidden = true;
@@ -36,10 +37,12 @@ export const productHooks = {
     if (rec.published && (rec.displayOrder === "" || rec.displayOrder == null)) rec.displayOrder = nextOrder();
     return rec;
   },
-  listActions: () => `<button class="btn btn-ghost" data-weborder>${icon("layers")}Website order</button>`,
+  listActions: () => `<button class="btn btn-ghost" data-groups>${icon("layers")}Product groups</button><button class="btn btn-ghost" data-weborder>${icon("menu")}Website order</button>`,
   listMount: (root) => {
     const b = root.querySelector("[data-weborder]");
     if (b) b.addEventListener("click", openWebsiteOrder);
+    const g = root.querySelector("[data-groups]");
+    if (g) g.addEventListener("click", openGroups);
   },
 };
 

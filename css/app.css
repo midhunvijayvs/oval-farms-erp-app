@@ -544,3 +544,42 @@ body.modal-open { overflow: hidden; }
   .zone-fields { grid-template-columns: 1fr 1fr; }
   .zone-fields .check { grid-column: 1 / -1; padding-bottom: 0; }
 }
+
+/* Search-as-you-type dropdown (js/combo.js) */
+.combo { position: relative; flex: 1; min-width: 0; }
+.combo .combo-input { padding-right: 34px; text-overflow: ellipsis; }
+.combo-thumbs .combo-input { padding-left: 46px; }
+.combo-caret { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: var(--muted); display: flex; cursor: pointer; }
+.combo-caret .ic { width: 18px; height: 18px; }
+.combo-sel { position: absolute; left: 6px; top: 50%; transform: translateY(-50%); display: flex; pointer-events: none; }
+.combo-sel img, .combo-sel .combo-ph, .combo-opt img, .combo-opt .combo-ph { width: 32px; height: 32px; border-radius: 7px; object-fit: cover; flex: none; background: var(--surface-2); border: 1px solid var(--border); display: grid; place-items: center; color: var(--muted); }
+.combo-ph .ic { width: 17px; height: 17px; }
+.combo-list { position: absolute; z-index: 40; left: 0; right: 0; top: calc(100% + 4px); max-height: 320px; overflow-y: auto; background: var(--surface); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: var(--shadow-lg); padding: 4px; }
+.combo-opt { display: flex; align-items: center; gap: 10px; padding: 7px 9px; border-radius: 9px; cursor: pointer; }
+.combo-opt.on { background: var(--brand-soft); }
+.combo-txt { display: grid; min-width: 0; }
+.combo-txt b { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.combo-txt small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.combo-group .combo-ph { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.combo-none { padding: 10px 12px; color: var(--muted); font-size: 14px; }
+.line-group { border-style: dashed; border-color: var(--accent); }
+
+/* Product groups */
+.group-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.group-list li { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.group-list li.clickable:hover { border-color: var(--brand); }
+.group-list .img-ph { width: 40px; height: 40px; border-radius: 9px; flex: none; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.group-list .grow { flex: 1; min-width: 0; }
+.group-rows { display: grid; gap: 8px; }
+.group-row { display: grid; grid-template-columns: minmax(0, 1fr) 100px 38px; gap: 8px; align-items: end; padding: 10px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
+.group-row .line-del { margin-top: 0; }
+
+/* Open orders summary */
+.summary-wrap { overflow-x: auto; }
+.summary-tbl td, .summary-tbl th { white-space: nowrap; }
+.summary-tbl tfoot td { font-weight: 700; border-top: 2px solid var(--border-strong); }
+.summary-tbl .neg { color: var(--danger); }
+@media (max-width: 640px) {
+  .group-row { grid-template-columns: 1fr 38px; }
+  .group-row .combo { grid-column: 1 / -1; }
+}

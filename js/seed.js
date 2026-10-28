@@ -28,16 +28,17 @@ export function seedDemo() {
     ["pellet", { name: "Mush Pellet", category: "Value-Added Product", unit: "kg", salePrice: 39, costPrice: 22, gstRate: "0", reorderLevel: 30, openingStock: 120,
       packs: [{ id: "loose", name: "Loose", size: 1, price: 39, mrp: "", published: true }, { id: "bag25", name: "Bag", size: 25, price: 850, mrp: 975, published: true }],
       ...web("Grow your own", "home/sec-2-3.jpg", "Pellets for growing mushrooms, loose or by the bag.", 60) }],
-    ["spawn", { name: "Oyster Spawn", category: "Raw Material", unit: "kg", costPrice: 90, gstRate: "0", reorderLevel: 10, openingStock: 25 }],
+    ["spawn", { name: "Oyster Spawn", category: "Raw Material", unit: "kg", salePrice: 140, costPrice: 90, gstRate: "0", reorderLevel: 10, openingStock: 25 }],
     ["mspawn", { name: "Milky Spawn", category: "Raw Material", unit: "kg", costPrice: 110, gstRate: "0", reorderLevel: 8, openingStock: 12 }],
     ["straw", { name: "Paddy Straw", category: "Raw Material", unit: "kg", costPrice: 8, gstRate: "0", reorderLevel: 100, openingStock: 400 }],
     ["oil", { name: "Gingelly Oil", category: "Raw Material", unit: "L", costPrice: 260, gstRate: "5", reorderLevel: 5, openingStock: 12 }],
     ["spice", { name: "Pickle Spice Mix", category: "Raw Material", unit: "kg", costPrice: 380, gstRate: "5", reorderLevel: 2, openingStock: 6 }],
-    ["bags", { name: "PP Grow Bags (16x24)", category: "Packaging", unit: "pcs", costPrice: 3, gstRate: "18", reorderLevel: 200, openingStock: 600 }],
+    ["bags", { name: "PP Grow Bags (16x24)", category: "Packaging", unit: "pcs", salePrice: 6, costPrice: 3, gstRate: "18", reorderLevel: 200, openingStock: 600 }],
     ["jars", { name: "Glass Jar 200 g", category: "Packaging", unit: "pcs", costPrice: 14, gstRate: "18", reorderLevel: 50, openingStock: 140 }],
     ["pouch", { name: "Zip Pouch 100 g", category: "Packaging", unit: "pcs", costPrice: 4, gstRate: "18", reorderLevel: 100, openingStock: 350 }],
   ];
   for (const [k, v] of items) I[k] = put("products", { active: true, ...v }).id;
+  put("productGroups", { name: "All items to make a bed", items: [{ productId: I.pellet, packId: "loose", qty: 1 }, { productId: I.spawn, packId: null, qty: 1 }, { productId: I.bags, packId: null, qty: 1 }] });
 
   const C = {};
   for (const [k, v] of [
