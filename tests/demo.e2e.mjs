@@ -20,8 +20,16 @@ for (const vp of [{ width: 1280, height: 860 }, { width: 390, height: 844 }]) {
   page.on("pageerror", (e) => errors.push(e.message));
   page.on("console", (m) => { if (m.type() === "error" && !/fonts|favicon/.test(m.text())) errors.push(m.text()); });
   page.on("dialog", (d) => d.accept());
+  await page.addInitScript(() => { window.open = (u) => { window.__opened = u; return null; }; });
   const tag = vp.width < 500 ? "phone" : "desktop";
   const view = () => page.textContent("#view");
+  // Search dropdowns (js/combo.js): type, then click the matching row
+  const pick = async (sel, type, label) => {
+    await page.click(`${sel} .combo-input`);
+    await page.fill(`${sel} .combo-input`, type);
+    await page.click(`${sel} .combo-opt:has-text("${label}")`);
+    await page.waitForTimeout(120);
+  };
 
   await page.goto(BASE);
   await page.click("[data-demo]", { timeout: 8000 });
@@ -47,19 +55,49 @@ for (const vp of [{ width: 1280, height: 860 }, { width: 390, height: 844 }]) {
   await page.click('[data-tab="open"]');
   await page.screenshot({ path: `${OUT}/orders-${tag}.png`, fullPage: true });
 
-  // New phone order for a walk-in customer
+  // Open orders summary
+  await page.click("[data-summary]");
+  await page.waitForSelector(".summary-tbl tfoot");
+  const sumText = await page.textContent(".modal");
+  check(sumText.includes("Grand total") && sumText.includes("Profit") && sumText.includes("Oyster Mushroom (Fresh)"), `${tag}: open orders summary lists products and a grand total`);
+  await page.screenshot({ path: `${OUT}/orders-summary-${tag}.png` });
+  const [sumDl] = await Promise.all([page.waitForEvent("download"), page.click('.modal-foot .btn-primary')]);
+  check(/^open-orders-.*\.jpg$/.test(sumDl.suggestedFilename()), `${tag}: summary saved as a JPG (${sumDl.suggestedFilename()})`);
+  await sumDl.saveAs(`${OUT}/open-orders-${tag}.jpg`);
+  await page.click(".modal [data-close]");
+  await page.waitForSelector(".modal-wrap.show", { state: "detached" });
+
+  // New phone order: customer found by typing, no walk-in
   await page.goto(BASE + "#/orders/new");
   await page.waitForSelector("[data-save]");
-  await page.selectOption('.line [data-f="productId"]', { label: "Mushroom Soup Premix 25 g" });
+  await page.click("[data-customer] .combo-input");
+  await page.fill("[data-customer] .combo-input", "walk");
+  check((await page.textContent("[data-customer] .combo-list")).includes("No customer"), `${tag}: no walk-in customer option`);
+  await page.fill("[data-customer] .combo-input", "ho");
+  const custOpts = await page.$$eval("[data-customer] .combo-opt b", (b) => b.map((x) => x.textContent));
+  check(custOpts[0] === "Hotel Green Leaf", `${tag}: typing "ho" finds Hotel Green Leaf first (${custOpts.join(", ")})`);
+  await page.press("[data-customer] .combo-input", "Escape");
+  await pick(".line [data-pick]", "soup", "Mushroom Soup Premix 25 g");
+  check(!!(await page.$('.line [data-pick] .combo-sel img')), `${tag}: chosen product shows its photo`);
   await page.fill('.line [data-f="qty"]', "4");
   await page.press('.line [data-f="qty"]', "Tab");
   await page.waitForTimeout(150);
   check((await page.textContent(".totals .grand")).includes("240.00"), `${tag}: order total 4 × ₹60`);
+  await page.click("[data-save]");
+  await page.waitForTimeout(150);
+  check((await page.textContent("#toasts")).includes("Choose the customer"), `${tag}: an order needs a customer`);
+  await pick("[data-customer]", "hotel", "Hotel Green Leaf");
+  check((await page.inputValue('[data-h="phone"]')) === "9847000002", `${tag}: picking the customer fills the phone`);
+  await page.click(".line [data-pick] .combo-input");
+  await page.fill(".line [data-pick] .combo-input", "");
   await page.screenshot({ path: `${OUT}/order-new-${tag}.png`, fullPage: true });
+  check((await page.$$(".line [data-pick] .combo-opt img")).length > 2, `${tag}: product list shows photos`);
+  await page.press(".line [data-pick] .combo-input", "Escape");
   await page.click("[data-save]");
   await page.waitForSelector(".page-head h1");
   const h1 = await page.textContent(".page-head h1");
   check(/OF-[A-Z0-9]{6}/.test(h1) && h1.includes("Offline") && h1.includes("Confirmed"), `${tag}: phone order saved as offline (${h1.trim()})`);
+  check((await view()).includes("Hotel Green Leaf"), `${tag}: order saved for the chosen customer`);
 
   // Invoice from that order
   await page.click('a[href^="#/sales/new?order="]');
@@ -69,6 +107,12 @@ for (const vp of [{ width: 1280, height: 860 }, { width: 390, height: 844 }]) {
   await page.click("[data-save]");
   await page.waitForSelector(".paper");
   check((await page.textContent(".paper")).includes("240.00"), `${tag}: invoice total matches the order (GST-inclusive price)`);
+  const [invDl] = await Promise.all([page.waitForEvent("download"), page.click("[data-wajpg]")]);
+  check(/^INV-.*\.jpg$/.test(invDl.suggestedFilename()), `${tag}: invoice saved as a JPG (${invDl.suggestedFilename()})`);
+  await invDl.saveAs(`${OUT}/invoice-${tag}.jpg`);
+  await page.waitForFunction(() => /^https:\/\/wa\.me\/\d/.test(window.__opened || ""), null, { timeout: 3000 }).catch(() => {});
+  const waUrl = await page.evaluate(() => window.__opened);
+  check(String(waUrl).startsWith("https://wa.me/919847000002"), `${tag}: WhatsApp opens the customer's chat (${waUrl})`);
   await page.click('.page-actions a[href^="#/orders/"]');
   await page.waitForSelector(".page-head h1");
   check((await view()).includes("INV-"), `${tag}: order links to its invoice`);
@@ -163,11 +207,12 @@ for (const vp of [{ width: 1280, height: 860 }, { width: 390, height: 844 }]) {
   await page.waitForSelector(".modal-wrap.show", { state: "detached" });
   await page.goto(BASE + "#/orders/new");
   await page.waitForSelector("[data-save]");
-  await page.selectOption('.line[data-i="0"] [data-f="productId"]', { label: "Mush Pellet – Bag (25 kg)" });
+  await pick("[data-customer]", "anand", "Anand Vegetables");
+  await pick('.line[data-i="0"] [data-pick]', "pellet", "Mush Pellet – Bag (25 kg)");
   await page.fill('.line[data-i="0"] [data-f="qty"]', "2");
   await page.press('.line[data-i="0"] [data-f="qty"]', "Tab");
   await page.click("[data-addline]");
-  await page.selectOption('.line[data-i="1"] [data-f="productId"]', { label: "Mush Pellet – Loose (1 kg)" });
+  await pick('.line[data-i="1"] [data-pick]', "mush p", "Mush Pellet – Loose (1 kg)");
   await page.fill('.line[data-i="1"] [data-f="qty"]', "10");
   await page.press('.line[data-i="1"] [data-f="qty"]', "Tab");
   await page.waitForTimeout(150);
@@ -188,6 +233,41 @@ for (const vp of [{ width: 1280, height: 860 }, { width: 390, height: 844 }]) {
   await page.goto(BASE + "#/products");
   await page.waitForSelector("tr[data-id]");
   check((await pelletRow()).includes("60 kg"), `${tag}: invoice takes 2 × 25 + 10 = 60 kg off one stock (${(await pelletRow()).replace(/\s+/g, " ")})`);
+
+  // Product groups: the bed kit, picked on an order with quantity 4
+  await page.goto(BASE + "#/products");
+  await page.waitForSelector("[data-groups]");
+  await page.click("[data-groups]");
+  await page.waitForSelector(".group-list li");
+  check((await page.textContent(".group-list")).includes("All items to make a bed"), `${tag}: products has a group list`);
+  await page.click(".modal-foot .btn-primary");
+  await page.waitForSelector("[data-gname]");
+  await page.fill("[data-gname]", "Two pickles and soup");
+  await pick('.group-row[data-r="0"] [data-gitem]', "pickle", "Mushroom Pickle 200 g");
+  await page.fill('.group-row[data-r="0"] [data-gqty]', "2");
+  await page.click("[data-addrow]");
+  await pick('.group-row[data-r="1"] [data-gitem]', "soup", "Mushroom Soup Premix 25 g");
+  await page.screenshot({ path: `${OUT}/group-form-${tag}.png` });
+  await page.click('.modal-foot .btn-primary:has-text("Save group")');
+  await page.waitForTimeout(300);
+  check((await page.textContent(".group-list")).includes("Two pickles and soup"), `${tag}: new group saved`);
+  await page.screenshot({ path: `${OUT}/groups-${tag}.png` });
+  await page.click(".modal [data-close]");
+  await page.waitForSelector(".modal-wrap.show", { state: "detached" });
+  await page.goto(BASE + "#/orders/new");
+  await page.waitForSelector("[data-save]");
+  await pick("[data-customer]", "fresh", "FreshMart Supermarket");
+  await pick('.line[data-i="0"] [data-pick]', "all items", "All items to make a bed");
+  check(!!(await page.$(".line-group")), `${tag}: group line waits for a quantity`);
+  await page.fill('.line[data-i="0"] [data-f="qty"]', "4");
+  await page.press('.line[data-i="0"] [data-f="qty"]', "Tab");
+  await page.waitForTimeout(200);
+  const lines = await page.$$eval(".line", (ls) => ls.map((l) => [l.querySelector(".combo-input").value, l.querySelector('[data-f="qty"]').value]));
+  check(lines.length === 3 && lines.every((l) => l[1] === "4") && lines.some((l) => l[0].includes("Loose (1 kg)")) && lines.some((l) => l[0] === "Oyster Spawn") && lines.some((l) => l[0].startsWith("PP Grow Bags")), `${tag}: bed kit × 4 opens into 3 products × 4 (${JSON.stringify(lines)})`);
+  check((await page.textContent(".totals .grand")).includes("740.00"), `${tag}: kit total 4 × (39 + 140 + 6)`);
+  await page.screenshot({ path: `${OUT}/order-group-${tag}.png`, fullPage: true });
+  await page.click("[data-save]");
+  await page.waitForSelector('a[href^="#/sales/new?order="]');
 
   // Stock shows what's on order
   await page.goto(BASE + "#/stock");

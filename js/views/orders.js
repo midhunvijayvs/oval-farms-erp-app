@@ -5,12 +5,15 @@ import { can } from "../session.js";
 import { list } from "../schema.js";
 import { esc, money, num, toDateStr, round2 } from "../util.js";
 import { icon } from "../icons.js";
-import { toast, pageHead, chip, emptyState, stat, confirmDialog } from "../ui.js";
+import { toast, pageHead, chip, emptyState, stat, confirmDialog, openModal } from "../ui.js";
 import { navigate } from "../router.js";
 import { openForm } from "./crud.js";
 import * as calc from "../calc.js";
 import { sellables, findPack, keyOf, splitKey, packsOf } from "../packs.js";
 import { mapOf, mapLink, customerAddress } from "./customers.js";
+import { comboHtml, bindCombo } from "../combo.js";
+import { drawSheet, sheetHeader, sendToWhatsApp, SENT_MESSAGE, C } from "../share.js";
+import { GROUP_PREFIX, groupsAll, expandGroup, groupSummary, groupPrice, productImage } from "./groups.js";
 
 export const ORDER_STATUSES = [
   { k: "placed", label: "New", tone: "warn" },
@@ -67,7 +70,7 @@ export const ordersView = {
     const count = (k) => all.filter((o) => matchesTab(o, k)).length;
 
     root.innerHTML = `
-      ${pageHead("Orders", "Website orders and orders taken by phone, WhatsApp or in person", can("write") ? `<a class="btn btn-primary new-btn" href="#/orders/new">${icon("plus")}New order</a>` : "")}
+      ${pageHead("Orders", "Website orders and orders taken by phone, WhatsApp or in person", `<button class="btn btn-ghost" data-summary>${icon("chart")}Open Orders Summary</button>` + (can("write") ? `<a class="btn btn-primary new-btn" href="#/orders/new">${icon("plus")}New order</a>` : ""))}
       <div class="stats stats-3">
         ${stat("New, to confirm", String(fresh.length), { ic: "alert", tone: fresh.length ? "warn" : "" })}
         ${stat("Not invoiced yet", String(toBill.length), { ic: "file" })}
@@ -95,8 +98,77 @@ export const ordersView = {
     root.querySelector("[data-q]").addEventListener("input", (e) => { st.q = e.target.value; const p = e.target.selectionStart; rr(); const i = root.querySelector("[data-q]"); i.focus(); i.setSelectionRange(p, p); });
     root.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => { st.tab = b.dataset.tab; rr(); }));
     root.querySelectorAll("tr[data-id]").forEach((tr) => tr.addEventListener("click", () => navigate("#/orders/" + tr.dataset.id)));
+    root.querySelector("[data-summary]").addEventListener("click", openOrdersSummary);
   },
 };
+
+// ---------------- open orders summary ----------------
+// Every product on the open orders added up: quantity, what customers pay, what it costs us
+// (cost price per stock unit × qty × pack size) and the profit. Order prices include GST, so
+// profit is the price without GST minus the cost.
+export function ordersSummary() {
+  const orders = store.all("orders").filter((o) => OPEN.includes(o.status));
+  const rows = new Map();
+  let delivery = 0;
+  for (const o of orders) {
+    delivery += Number(o.deliveryCharge) || 0;
+    for (const l of o.items || []) {
+      const p = store.get("products", l.productId);
+      const key = keyOf(l.productId, l.packId) || "name:" + (l.name || "");
+      const k = p ? findPack(p, l.packId) : null;
+      const size = Number(l.size) || (k ? Number(k.size) : 1);
+      const qty = Number(l.qty) || 0;
+      const price = qty * (Number(l.price) || 0);
+      const gst = p ? Number(p.gstRate) || 0 : 0;
+      const hasCost = p && Number(p.costPrice) > 0;
+      const r = rows.get(key) || { name: p ? (k ? `${p.name} – ${k.name} (${num(k.size)} ${p.unit || ""})`.replace(" )", ")") : p.name) : l.name || "Item", unit: k ? "" : (p && p.unit) || l.unit || "", qty: 0, price: 0, cost: 0, net: 0, noCost: !hasCost, gst: gst > 0 };
+      r.qty += qty; r.price += price; r.net += price / (1 + gst / 100);
+      r.cost += hasCost ? qty * size * Number(p.costPrice) : 0;
+      rows.set(key, r);
+    }
+  }
+  const list = [...rows.values()].map((r) => ({ ...r, qty: round2(r.qty), price: round2(r.price), cost: round2(r.cost), profit: round2(r.net - r.cost) })).sort((a, b) => b.price - a.price || a.name.localeCompare(b.name));
+  const total = (k) => round2(list.reduce((t, r) => t + r[k], 0));
+  return { orders: orders.length, rows: list, price: total("price"), cost: total("cost"), profit: total("profit"), delivery: round2(delivery), anyGst: list.some((r) => r.gst), noCost: list.filter((r) => r.noCost).map((r) => r.name) };
+}
+
+export function openOrdersSummary() {
+  const s = ordersSummary();
+  const qtyText = (r) => `${num(r.qty)}${r.unit ? " " + r.unit : ""}`;
+  const notes = [
+    s.delivery ? `Delivery charges on these orders (${money(s.delivery)}) are not included.` : "",
+    s.anyGst ? "Profit is the price without GST minus the cost." : "",
+    s.noCost.length ? `No cost price set for: ${s.noCost.join(", ")}. Their cost counts as ₹0.` : "",
+  ].filter(Boolean);
+  openModal({
+    title: "Open orders summary",
+    wide: true,
+    body: !s.rows.length ? `<p class="muted">There are no open orders right now.</p>` : `
+      <p class="muted small">${s.orders} open ${s.orders === 1 ? "order" : "orders"} (new, confirmed, packed and out for delivery).</p>
+      <div class="summary-wrap"><table class="tbl summary-tbl"><thead><tr><th>Product</th><th class="r">Qty</th><th class="r">Price</th><th class="r">Cost</th><th class="r">Profit</th></tr></thead><tbody>
+        ${s.rows.map((r) => `<tr><td class="primary">${esc(r.name)}</td><td class="r" data-label="Qty">${esc(qtyText(r))}</td><td class="r" data-label="Price">${money(r.price)}</td><td class="r" data-label="Cost">${r.noCost ? '<span class="muted">–</span>' : money(r.cost)}</td><td class="r ${r.profit < 0 ? "neg" : ""}" data-label="Profit">${money(r.profit)}</td></tr>`).join("")}
+      </tbody><tfoot><tr><td class="primary">Grand total</td><td class="hide-sm"></td><td class="r" data-label="Price">${money(s.price)}</td><td class="r" data-label="Cost">${money(s.cost)}</td><td class="r ${s.profit < 0 ? "neg" : ""}" data-label="Profit">${money(s.profit)}</td></tr></tfoot></table></div>
+      ${notes.map((n) => `<p class="small muted">${esc(n)}</p>`).join("")}`,
+    actions: s.rows.length ? [
+      { label: "Close", cls: "btn-ghost" },
+      { label: "Send To WhatsApp", cls: "btn-primary", icon: "whatsapp", onClick: async () => {
+        const biz = store.settings();
+        const stamp = new Date();
+        const canvas = await drawSheet(async (p) => {
+          await sheetHeader(p, biz, "Open orders", [stamp.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) + ", " + stamp.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }), `${s.orders} open ${s.orders === 1 ? "order" : "orders"}`]);
+          p.table([{ label: "Product", w: 4 }, { label: "Qty", w: 1.5, align: "right" }, { label: "Price", w: 1.7, align: "right" }, { label: "Cost", w: 1.7, align: "right" }, { label: "Profit", w: 1.7, align: "right" }],
+            s.rows.map((r) => [r.name, qtyText(r), money(r.price), r.noCost ? "–" : money(r.cost), money(r.profit)]),
+            { foot: ["Grand total", "", money(s.price), money(s.cost), money(s.profit)] });
+          p.space(14);
+          for (const n of notes) { p.text(n, { size: 21, color: C.muted }); p.space(4); }
+        });
+        const res = await sendToWhatsApp(canvas, { filename: `open-orders-${toDateStr(stamp)}.jpg`, text: `Open orders summary, ${stamp.toLocaleDateString("en-IN")}` });
+        if (SENT_MESSAGE[res]) toast(SENT_MESSAGE[res]);
+        return true;
+      } },
+    ] : [{ label: "Close", cls: "btn-ghost" }],
+  });
+}
 
 export const orderDetailView = {
   title: "Order",
@@ -179,6 +251,13 @@ export const orderEditor = {
     const products = store.all("products").filter((p) => p.active !== false && (p.salePrice !== "" && p.salePrice != null || p.published || packsOf(p).length)).sort((a, b) => a.name.localeCompare(b.name));
     // Each product, or each of its pack sizes, is one choice: value "productId" or "productId|packId"
     const choices = sellables(products);
+    // Search-dropdown rows: every product and pack with its photo, then the product groups
+    const productOptions = () => [
+      ...choices.map((c) => ({ value: c.key, label: c.name, sub: c.price === "" || c.price == null ? c.product.category || "" : money(c.price), img: productImage(c.product), choice: c })),
+      ...groupsAll().map((g) => ({ value: GROUP_PREFIX + g.id, label: g.name, sub: "Group · " + groupSummary(g), ic: "layers", group: g })),
+    ];
+    const customerOptions = () => store.all("customers").sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")))
+      .map((c) => ({ value: c.id, label: c.name || "(no name)", sub: [c.phone, c.addrCity].filter(Boolean).join(" · ") }));
     const o = existing ? JSON.parse(JSON.stringify(existing)) : {
       channel: "offline", source: list("orderSources")[0] || "Phone call", status: "confirmed", payment: "cod",
       customerId: params.query && params.query.customer || "", items: [blankLine()], deliveryCharge: "", note: "", staffNote: "",
@@ -187,7 +266,20 @@ export const orderEditor = {
     const online = o.channel === "online";
     let addressTouched = !!existing;
 
+    const groupRow = (l, i) => {
+      const g = store.get("productGroups", l.groupId);
+      const opt = g ? { label: g.name, ic: "layers" } : null;
+      return `<div class="line line-simple line-group" data-i="${i}">
+        <div class="line-item">${comboHtml({ attr: "data-pick", selected: opt, thumbs: true, placeholder: "Type a product or group name…" })}
+          <small class="muted">${g ? `Group: ${esc(groupSummary(g))}. Enter how many groups and the products are added below.` : `<span class="text-warn">This group was deleted.</span>`}</small></div>
+        <label class="line-num"><span>Qty (groups)</span><input data-f="qty" type="number" inputmode="decimal" step="any" min="0" value="${esc(l.qty ?? "")}" placeholder="e.g. 4"></label>
+        <label class="line-num"><span>Price / group</span><input type="number" value="${g ? esc(groupPrice(g)) : ""}" disabled></label>
+        <button class="icon-btn line-del" data-del="${i}" aria-label="Remove line">${icon("trash")}</button>
+      </div>`;
+    };
+
     const lineRow = (l, i) => {
+      if (l.groupId) return groupRow(l, i);
       const p = products.find((x) => x.id === l.productId) || store.get("products", l.productId);
       const k = p ? findPack(p, l.packId) : null;
       const size = Number(l.size) || (k ? Number(k.size) : 1);
@@ -196,7 +288,7 @@ export const orderEditor = {
       const held = existing ? (existing.items || []).filter((x) => x.productId === (p && p.id)).reduce((t, x) => t + (Number(x.qty) || 0) * (Number(x.size) || 1), 0) : 0;
       const avail = p ? calc.availableOf(p.id) + held : null;
       return `<div class="line line-simple" data-i="${i}">
-        <div class="line-item"><select data-f="productId"><option value="">Select product…</option>${choices.map((c) => `<option value="${esc(c.key)}" ${c.key === key ? "selected" : ""}>${esc(c.name)}</option>`).join("")}${p && !choices.some((c) => c.key === key) ? `<option value="${esc(key)}" selected>${esc(l.name || p.name)}</option>` : ""}</select>
+        <div class="line-item">${comboHtml({ attr: "data-pick", selected: p ? { label: (choices.find((c) => c.key === key) || {}).name || l.name || p.name, img: productImage(p) } : l.name ? { label: l.name } : null, thumbs: true, placeholder: "Type a product or group name…" })}
           ${p ? `<small class="${Number(l.qty) * size > avail ? "text-warn" : "muted"}">Available: ${num(avail)} ${esc(p.unit || "")}${k ? ` (${num(Math.floor(avail / size))} × ${esc(k.name)})` : ""}</small>` : l.name ? `<small class="text-warn">${esc(l.name)} (not in Products)</small>` : ""}</div>
         <label class="line-num"><span>Qty${p ? " (" + esc(k ? k.name : p.unit || "") + ")" : ""}</span><input data-f="qty" type="number" inputmode="decimal" step="any" min="0" value="${esc(l.qty ?? "")}"></label>
         <label class="line-num"><span>Price</span><input data-f="price" type="number" inputmode="decimal" step="0.01" value="${esc(l.price ?? "")}"></label>
@@ -211,13 +303,13 @@ export const orderEditor = {
 
     const draw = () => {
       const t = totals();
-      const customers = store.all("customers").sort((a, b) => String(a.name || "").localeCompare(String(b.name || "")));
+      const cust = o.customerId ? store.get("customers", o.customerId) : null;
       root.innerHTML = `
         <div class="page-head"><div><a class="back" href="#/orders${existing ? "/" + esc(existing.id) : ""}">${icon("back")}${existing ? esc(orderNo(existing)) : "Orders"}</a><h1>${existing ? "Edit order" : "New order"}</h1>${online ? `<p class="muted">Placed on ovalfarm.in</p>` : ""}</div></div>
         <div class="editor">
           <div class="card"><div class="form-grid">
             <div class="field"><label>Customer</label>
-              <div class="with-btn"><select data-h="customerId" ${online ? "disabled" : ""}><option value="">Walk-in customer</option>${customers.map((c) => `<option value="${esc(c.id)}" ${c.id === o.customerId ? "selected" : ""}>${esc(c.name)}${c.phone ? " · " + esc(c.phone) : ""}</option>`).join("")}</select>
+              <div class="with-btn">${comboHtml({ attr: "data-customer", selected: cust ? { label: cust.name || "(no name)" } : !o.customerId && o.customer && o.customer.name ? { label: o.customer.name } : null, placeholder: "Type the customer's name or phone…", disabled: online })}
               ${online ? "" : `<button class="btn btn-ghost" data-addcust title="New customer">${icon("plus")}</button>`}</div></div>
             ${online ? "" : `<div class="field half"><label>Order came by</label><select data-h="source">${list("orderSources").map((s) => `<option ${s === o.source ? "selected" : ""}>${esc(s)}</option>`).join("")}</select></div>`}
             <div class="field half"><label>Status</label><select data-h="status">${ORDER_STATUSES.map((s) => `<option value="${s.k}" ${s.k === o.status ? "selected" : ""}>${s.label}</option>`).join("")}</select></div>
@@ -269,27 +361,67 @@ export const orderEditor = {
       }
     };
 
+    // Replaces the group line at i with its products × the group quantity. A product already on
+    // the order gets the extra quantity added to its line. Returns how many products it added.
+    const unzip = (i) => {
+      const l = o.items[i];
+      const g = store.get("productGroups", l.groupId);
+      const lines = g ? expandGroup(g, Number(l.qty) || 0) : [];
+      o.items.splice(i, 1);
+      let at = i;
+      for (const n of lines) {
+        const same = o.items.find((x) => !x.groupId && x.productId === n.productId && (x.packId || null) === (n.packId || null));
+        if (same) same.qty = round2((Number(same.qty) || 0) + n.qty);
+        else o.items.splice(at++, 0, n);
+      }
+      // An empty line left from before (e.g. the first blank row) isn't needed any more
+      o.items = o.items.filter((x, j) => x.productId || x.name || x.groupId || o.items.length === 1);
+      if (!o.items.length) o.items.push(blankLine());
+      return lines.length;
+    };
+
     const bind = () => {
       root.querySelectorAll("[data-h]").forEach((el) => el.addEventListener("change", () => {
         if (el.dataset.h === "address") addressTouched = true;
         readHeader();
-        if (el.dataset.h === "customerId") { fillFromCustomer(); draw(); }
         if (el.dataset.h === "deliveryCharge") draw();
       }));
+      const cb = root.querySelector("[data-customer]");
+      if (cb && !online) bindCombo(cb, { options: customerOptions, empty: "No customer with that name. Add them with the + button.", onPick: (opt) => {
+        readHeader();
+        o.customerId = opt.value;
+        fillFromCustomer();
+        draw();
+      } });
+      const focusQty = (i) => { const q = root.querySelector(`.line[data-i="${i}"] [data-f="qty"]`); if (q) { q.focus(); q.select(); } };
       root.querySelectorAll(".line").forEach((row) => {
         const i = +row.dataset.i;
+        bindCombo(row.querySelector("[data-pick]"), { options: productOptions, thumbs: true, onPick: (opt) => {
+          readHeader();
+          if (opt.group) o.items[i] = { groupId: opt.group.id, qty: "" };
+          else {
+            const c = opt.choice;
+            const { productId, packId } = splitKey(c.key);
+            const l = o.items[i].groupId ? (o.items[i] = blankLine()) : o.items[i];
+            Object.assign(l, { productId, packId: packId || null, size: c.size, price: c.price === "" || c.price == null ? "" : Number(c.price), name: c.name, unit: c.pack ? c.pack.name : c.product.unit || "" });
+          }
+          draw();
+          focusQty(i);
+        } });
         row.querySelectorAll("[data-f]").forEach((el) => el.addEventListener("change", () => {
           readHeader();
           const l = o.items[i];
           const f = el.dataset.f;
-          if (f === "productId") {
-            const c = choices.find((x) => x.key === el.value);
-            const { productId, packId } = splitKey(el.value);
-            Object.assign(l, { productId, packId: packId || null, size: c ? c.size : 1 });
-            if (c) { l.price = c.price === "" || c.price == null ? "" : Number(c.price); l.name = c.name; l.unit = c.pack ? c.pack.name : c.product.unit || ""; }
-          } else l[f] = el.type === "number" ? (el.value === "" ? "" : Number(el.value)) : el.value;
+          l[f] = el.type === "number" ? (el.value === "" ? "" : Number(el.value)) : el.value;
+          if (l.groupId) {
+            if (!(Number(l.qty) > 0)) return;
+            const added = unzip(i);
+            draw();
+            toast(`Added ${added} ${added === 1 ? "product" : "products"} from the group`);
+            return;
+          }
           draw();
-          const again = root.querySelector(`.line[data-i="${i}"] [data-f="${f === "productId" ? "qty" : f}"]`);
+          const again = root.querySelector(`.line[data-i="${i}"] [data-f="${f}"]`);
           if (again) again.focus();
         }));
       });
@@ -304,6 +436,10 @@ export const orderEditor = {
       if (ac) ac.addEventListener("click", () => { readHeader(); openForm("customers", null, { onSaved: (c) => { o.customerId = c.id; fillFromCustomer(); draw(); } }); });
       root.querySelector("[data-save]").addEventListener("click", () => {
         readHeader();
+        const pendingGroup = o.items.find((l) => l.groupId && !(Number(l.qty) > 0));
+        if (pendingGroup) return toast("Enter how many of the group " + ((store.get("productGroups", pendingGroup.groupId) || {}).name || "") + " you need", "error");
+        for (let i = o.items.length - 1; i >= 0; i--) if (o.items[i].groupId) unzip(i);
+        if (!online && !o.customerId) return toast("Choose the customer", "error");
         const items = o.items.filter((l) => l.productId || l.name).map((l) => {
           const p = store.get("products", l.productId);
           const c = choices.find((x) => x.key === keyOf(l.productId, l.packId));
@@ -345,7 +481,7 @@ export const orderEditor = {
     const fillFromCustomerKeepPhone = () => {
       const phone = o.customer && o.customer.phone;
       const c = store.get("customers", o.customerId);
-      o.customer = { name: c ? c.name || "" : "Walk-in customer", phone: phone || (c && c.phone) || "", ...(c && c.email ? { email: c.email } : {}) };
+      o.customer = { name: c ? c.name || "" : (o.customer && o.customer.name) || "", phone: phone || (c && c.phone) || "", ...(c && c.email ? { email: c.email } : {}) };
     };
 
     if (!existing && o.customerId) fillFromCustomer();

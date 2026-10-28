@@ -10,6 +10,8 @@ import { openForm } from "./crud.js";
 import { navigate } from "../router.js";
 import { orderNo, addressText } from "./orders.js";
 import { sellables, findPack, sellName, keyOf, splitKey } from "../packs.js";
+import { customerAddress } from "./customers.js";
+import { drawSheet, sheetHeader, sendToWhatsApp, SENT_MESSAGE, C } from "../share.js";
 
 // "Mush pellet – Bag (25 kg)" for a line sold by pack, else the product name
 export function lineName(l, product) {
@@ -324,6 +326,46 @@ export function amountInWords(amount) {
   return "Rupees " + parts.join(" ") + (paise ? " and " + words99(paise) + " Paise" : "") + " Only";
 }
 
+// The invoice as a picture for WhatsApp (js/share.js): same content as the printed one.
+async function drawInvoice(p, { doc, biz, party, items, t, paid, balance, split, taxByRate }) {
+  await sheetHeader(p, biz, biz.gstin ? "Tax Invoice" : "Invoice", [`No. ${doc.number}`, `Date ${fmtDate(doc.date)}`, doc.dueDate ? `Due ${fmtDate(doc.dueDate)}` : ""].filter(Boolean));
+  p.text("BILL TO", { size: 19, weight: 700, color: C.muted });
+  p.space(4);
+  p.text(party ? party.name : "Customer", { size: 30, weight: 700 });
+  const addr = party ? addressText(customerAddress(party)) || party.address || "" : "";
+  for (const l of [addr, party && party.phone && "Ph: " + party.phone, party && party.gstin && "GSTIN: " + party.gstin].filter(Boolean)) p.text(l, { size: 23, color: C.ink2 });
+  p.space(24);
+  const anyTax = (doc.lines || []).some((l) => Number(l.gstRate));
+  const cols = [{ label: "#", w: 0.5 }, { label: "Item", w: 4.4 }, { label: "Qty", w: 1.2, align: "right" }, { label: "Rate", w: 1.6, align: "right" }];
+  if (anyTax) cols.push({ label: "GST", w: 0.9, align: "right" });
+  cols.push({ label: "Amount", w: 1.8, align: "right" });
+  p.table(cols, (doc.lines || []).map((l, i) => {
+    const it = items.get(l.itemId) || {};
+    const c = calc.lineCalc(l);
+    const name = lineName(l, items.get(l.itemId)) + (l.discount ? ` (discount ${l.discount}%)` : "");
+    const row = [String(i + 1), name, `${num(l.qty)}${l.packId ? "" : it.unit ? " " + it.unit : ""}`, money(l.rate)];
+    if (anyTax) row.push(`${l.gstRate || 0}%`);
+    row.push(money(c.total));
+    return row;
+  }));
+  p.space(18);
+  p.kv("Taxable value", money(t.subtotal));
+  if (t.tax && split) { p.kv("CGST", money(t.tax / 2)); p.kv("SGST", money(t.tax / 2)); }
+  else if (t.tax) p.kv("IGST", money(t.tax));
+  if (t.shipping) p.kv("Delivery / other", money(t.shipping));
+  if (t.roundOff) p.kv("Round off", money(t.roundOff));
+  p.space(4);
+  p.kv("Total", money(t.total), { size: 34, weight: 800, color: C.brandInk });
+  if (paid) { p.kv("Paid", money(paid)); p.kv("Balance due", money(balance), { weight: 700, color: balance > 0 ? C.danger : C.ink }); }
+  p.space(10);
+  p.text("Amount in words: " + amountInWords(t.total), { size: 21, color: C.ink2 });
+  if (biz.upi || biz.bank) { p.space(14); p.text("Payment details", { size: 19, weight: 700, color: C.muted }); if (biz.bank) p.text(biz.bank, { size: 22 }); if (biz.upi) p.text("UPI: " + biz.upi, { size: 24, weight: 700 }); }
+  if (doc.notes) { p.space(14); p.text("Notes: " + doc.notes, { size: 21, color: C.ink2 }); }
+  if (biz.terms) { p.space(10); p.text(biz.terms, { size: 19, color: C.muted }); }
+  p.space(26);
+  p.text("Thank you for your business!", { size: 26, weight: 700, color: C.brand, align: "center" });
+}
+
 export function docView(kind) {
   const D = DOCS[kind];
   return {
@@ -357,6 +399,7 @@ export function docView(kind) {
             ${can("write") ? `<a class="btn btn-ghost" href="#/${D.route}/${doc.id}/edit">${icon("edit")}Edit</a>` : ""}
             <button class="btn btn-ghost" data-print>${icon("printer")}Print / PDF</button>
             ${isSale ? `<button class="btn btn-ghost" data-wa>${icon("whatsapp")}WhatsApp</button>` : ""}
+            ${isSale ? `<button class="btn btn-ghost" data-wajpg>${icon("whatsapp")}Send to WhatsApp as JPG</button>` : ""}
             ${can("write") && isSale && doc.status === "Confirmed" ? `<button class="btn btn-ghost" data-delivered>${icon("truck")}Mark delivered</button>` : ""}
             ${isSale && doc.orderId && store.get("orders", doc.orderId) ? `<a class="btn btn-ghost" href="#/orders/${esc(doc.orderId)}">${icon("cart")}${esc(orderNo(store.get("orders", doc.orderId)))}</a>` : ""}
             ${can("write") && !isSale ? `<button class="btn btn-ghost" data-dup>${icon("file")}Duplicate</button>` : ""}
@@ -461,6 +504,15 @@ export function docView(kind) {
         const phone = party && party.phone ? party.phone.replace(/\D/g, "") : "";
         const ph = phone.length === 10 ? "91" + phone : phone;
         window.open(`https://wa.me/${ph}?text=${encodeURIComponent(text)}`, "_blank");
+      });
+      if (q("[data-wajpg]")) q("[data-wajpg]").addEventListener("click", async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        try {
+          const canvas = await drawSheet((p) => drawInvoice(p, { doc, biz, party, items, t, paid, balance, split, taxByRate }));
+          const res = await sendToWhatsApp(canvas, { filename: `${doc.number}.jpg`, phone: party && party.phone, text: `${biz.name || "Oval Farms"} · Invoice ${doc.number} · ${money(t.total)}${party ? " · " + party.name : ""}` });
+          if (SENT_MESSAGE[res]) toast(SENT_MESSAGE[res]);
+        } finally { btn.disabled = false; }
       });
     },
   };
