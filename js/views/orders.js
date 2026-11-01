@@ -42,6 +42,8 @@ const when = (v) => {
 };
 const statusChip = (k) => { const s = statusInfo(k); return chip(s.label, s.tone); };
 export const addressText = (a) => (!a ? "" : typeof a === "string" ? a : [a.name, a.line1, a.line2, a.landmark, a.city, a.district, a.state, a.pincode].filter(Boolean).join(", "));
+// "House 12 Temple Road Kochi 682001": every address field, one line, for the orders list
+export const addressSummary = (a) => (!a ? "" : typeof a === "string" ? a.replace(/\s+/g, " ") : [a.line1, a.line2, a.landmark, a.city, a.district, a.state, a.pincode].filter(Boolean).join(" "));
 const phoneDigits = (p) => String(p || "").replace(/\D/g, "").slice(-10);
 const customerName = (o) => (o.customer && o.customer.name) || (o.customerId ? (store.get("customers", o.customerId) || {}).name : "") || "Walk-in customer";
 const byNewest = (a, b) => toMs(b.createdAt) - toMs(a.createdAt);
@@ -63,36 +65,33 @@ export const ordersView = {
       const q = st.q.toLowerCase();
       rows = rows.filter((o) => orderNo(o).toLowerCase().includes(q) || [customerName(o), o.customer && o.customer.phone, addressText(o.address), o.invoiceNumber].join(" ").toLowerCase().includes(q));
     }
-    const todayStr = toDateStr(new Date());
-    const todays = all.filter((o) => toMs(o.createdAt) && toDateStr(new Date(toMs(o.createdAt))) === todayStr && o.status !== "cancelled");
     const fresh = all.filter((o) => o.status === "placed");
     const toBill = all.filter((o) => o.status !== "cancelled" && !o.invoiceId);
     const count = (k) => all.filter((o) => matchesTab(o, k)).length;
 
-    root.innerHTML = `
-      ${pageHead("Orders", "Website orders and orders taken by phone, WhatsApp or in person", `<button class="btn btn-ghost" data-summary>${icon("chart")}Open Orders Summary</button>` + (can("write") ? `<a class="btn btn-primary new-btn" href="#/orders/new">${icon("plus")}New order</a>` : ""))}
-      <div class="stats stats-3">
+    root.innerHTML = `<div class="orders-page">
+      ${pageHead("Orders", "Website orders and orders taken by phone, WhatsApp or in person", `<button class="btn btn-ghost" data-summary>${icon("chart")}Summary of orders to Deliver</button>` + (can("write") ? `<a class="btn btn-primary new-btn" href="#/orders/new">${icon("plus")}New order</a>` : ""))}
+      <div class="stats order-stats">
         ${stat("New, to confirm", String(fresh.length), { ic: "alert", tone: fresh.length ? "warn" : "" })}
         ${stat("Not invoiced yet", String(toBill.length), { ic: "file" })}
-        ${stat("Today", money(todays.reduce((t, o) => t + (Number(o.total) || 0), 0)), { sub: `${todays.length} ${todays.length === 1 ? "order" : "orders"}`, ic: "trend", tone: "ok" })}
       </div>
       <div class="tabs order-tabs" role="tablist">${TABS.map((t) => `<button class="tab ${st.tab === t.k ? "on" : ""}" role="tab" aria-selected="${st.tab === t.k}" data-tab="${t.k}">${esc(t.label)} <span class="tab-count">${count(t.k)}</span></button>`).join("")}</div>
       <div class="toolbar">
         <div class="search">${icon("search")}<input type="search" placeholder="Search order no., name, phone, place or invoice…" value="${esc(st.q)}" data-q></div>
       </div>
       <div class="card card-flush">
-        ${rows.length ? `<div class="table-wrap"><table class="tbl"><thead><tr><th>Order</th><th>Placed</th><th>Customer</th><th>Channel</th><th>Status</th><th>Invoice</th><th class="r">Total</th></tr></thead><tbody>
+        ${rows.length ? `<div class="table-wrap"><table class="tbl orders-tbl"><thead><tr><th>Order</th><th>Placed</th><th>Customer</th><th>Channel</th><th>Status</th><th>Invoice</th><th class="r">Total</th></tr></thead><tbody>
           ${rows.map((o) => `<tr class="clickable" data-id="${esc(o.id)}">
             <td class="primary" data-label="Order">${esc(orderNo(o))}</td>
-            <td data-label="Placed">${esc(when(o.createdAt))}</td>
-            <td data-label="Customer">${esc(customerName(o))}<small class="muted block">${esc((o.address && o.address.city) || o.source || "")}</small></td>
-            <td data-label="Channel">${chip(channelLabel(o))}</td>
-            <td data-label="Status">${statusChip(o.status)}</td>
-            <td data-label="Invoice">${o.invoiceNumber ? esc(o.invoiceNumber) : o.status === "cancelled" ? "" : `<span class="muted">Not yet</span>`}</td>
-            <td class="r" data-label="Total"><b>${money(o.total)}</b></td></tr>`).join("")}
+            <td class="o-date" data-label="Placed">${esc(when(o.createdAt))}</td>
+            <td class="o-cust" data-label="Customer"><span class="o-name">${esc(customerName(o))}</span><small class="muted addr-sum">${esc(addressSummary(o.address)) || "Pick-up"}</small></td>
+            <td class="o-chan" data-label="Channel">${chip(channelLabel(o))}</td>
+            <td class="o-status" data-label="Status">${statusChip(o.status)}</td>
+            <td class="o-inv" data-label="Invoice">${o.invoiceNumber ? esc(o.invoiceNumber) : o.status === "cancelled" ? "" : `<span class="muted">Not yet</span>`}</td>
+            <td class="r o-total" data-label="Total"><b>${money(o.total)}</b></td></tr>`).join("")}
         </tbody></table></div>` : emptyState(st.tab === "open" ? "No open orders right now." : "No orders here.", can("write") && !all.length ? `<a class="btn btn-primary" href="#/orders/new">${icon("plus")}Add the first order</a>` : "")}
       </div>
-      ${can("write") ? `<a class="fab" href="#/orders/new" aria-label="New order">${icon("plus")}</a>` : ""}`;
+      ${can("write") ? `<a class="fab" href="#/orders/new" aria-label="New order">${icon("plus")}</a>` : ""}</div>`;
 
     const rr = () => this.render(root);
     root.querySelector("[data-q]").addEventListener("input", (e) => { st.q = e.target.value; const p = e.target.selectionStart; rr(); const i = root.querySelector("[data-q]"); i.focus(); i.setSelectionRange(p, p); });
@@ -141,7 +140,7 @@ export function openOrdersSummary() {
     s.noCost.length ? `No cost price set for: ${s.noCost.join(", ")}. Their cost counts as ₹0.` : "",
   ].filter(Boolean);
   openModal({
-    title: "Open orders summary",
+    title: "Summary of orders to deliver",
     wide: true,
     body: !s.rows.length ? `<p class="muted">There are no open orders right now.</p>` : `
       <p class="muted small">${s.orders} open ${s.orders === 1 ? "order" : "orders"} (new, confirmed, packed and out for delivery).</p>
@@ -155,14 +154,14 @@ export function openOrdersSummary() {
         const biz = store.settings();
         const stamp = new Date();
         const canvas = await drawSheet(async (p) => {
-          await sheetHeader(p, biz, "Open orders", [stamp.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) + ", " + stamp.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }), `${s.orders} open ${s.orders === 1 ? "order" : "orders"}`]);
+          await sheetHeader(p, biz, "Orders to deliver", [stamp.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) + ", " + stamp.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" }), `${s.orders} open ${s.orders === 1 ? "order" : "orders"}`]);
           p.table([{ label: "Product", w: 4 }, { label: "Qty", w: 1.5, align: "right" }, { label: "Price", w: 1.7, align: "right" }, { label: "Cost", w: 1.7, align: "right" }, { label: "Profit", w: 1.7, align: "right" }],
             s.rows.map((r) => [r.name, qtyText(r), money(r.price), r.noCost ? "–" : money(r.cost), money(r.profit)]),
             { foot: ["Grand total", "", money(s.price), money(s.cost), money(s.profit)] });
           p.space(14);
           for (const n of notes) { p.text(n, { size: 21, color: C.muted }); p.space(4); }
         });
-        const res = await sendToWhatsApp(canvas, { filename: `open-orders-${toDateStr(stamp)}.jpg`, text: `Open orders summary, ${stamp.toLocaleDateString("en-IN")}` });
+        const res = await sendToWhatsApp(canvas, { filename: `open-orders-${toDateStr(stamp)}.jpg`, text: `Orders to deliver, ${stamp.toLocaleDateString("en-IN")}` });
         if (SENT_MESSAGE[res]) toast(SENT_MESSAGE[res]);
         return true;
       } },
@@ -194,26 +193,25 @@ export const orderDetailView = {
           ${write && !invoice && o.status !== "cancelled" ? `<a class="btn btn-ghost" href="#/sales/new?order=${encodeURIComponent(o.id)}">${icon("file")}Create invoice</a>` : ""}
           ${write && !invoice ? `<a class="btn btn-ghost" href="#/orders/${encodeURIComponent(o.id)}/edit">${icon("edit")}Edit order</a>` : ""}
         </div></div>
-      <div class="grid-2">
-        <div class="card"><div class="card-head"><h3>${icon("users")}Customer</h3>${cust ? `<button class="btn btn-link" data-cust>Open customer</button>` : ""}</div>
-          <div class="kv-row"><span>Name</span><b>${esc(customerName(o))}</b></div>
-          ${c.phone ? `<div class="kv-row"><span>Phone</span><span><a href="tel:${esc(c.phone)}">${esc(c.phone)}</a>${tel ? ` · <a href="https://wa.me/91${tel}" target="_blank" rel="noopener">${icon("whatsapp")}WhatsApp</a>` : ""}</span></div>` : ""}
+      <div class="order-grid">
+        <div class="card o-cust-card"><div class="card-head"><h3 class="hide-sm">${icon("users")}Customer</h3><h3 class="only-sm-block">${esc(customerName(o))}</h3>${cust && cust.type ? `<button class="chip chip-btn" data-cust title="Open the customer's details">${esc(cust.type)}</button>` : ""}</div>
+          <div class="kv-row hide-sm"><span>Name</span><b>${esc(customerName(o))}</b></div>
+          ${c.phone ? `<div class="kv-row kv-nolabel"><span>Phone</span><span><a href="tel:${esc(c.phone)}">${esc(c.phone)}</a>${tel ? ` · <a href="https://wa.me/91${tel}" target="_blank" rel="noopener">${icon("whatsapp")}WhatsApp</a>` : ""}</span></div>` : ""}
           ${c.email ? `<div class="kv-row"><span>Email</span><a href="mailto:${esc(c.email)}">${esc(c.email)}</a></div>` : ""}
-          ${addressText(o.address) ? `<div class="kv-row"><span>Deliver to</span><span class="r">${esc(addressText(o.address))}${mapOf(o.address) ? `<br>${mapLink(mapOf(o.address))}` : ""}</span></div>` : ""}
+          ${addressText(o.address) ? `<div class="kv-row kv-nolabel"><span>Deliver to</span><span class="r">${esc(addressText(o.address))}${mapOf(o.address) ? `<br>${mapLink(mapOf(o.address))}` : ""}</span></div>` : ""}
           ${o.note ? `<div class="kv-row"><span>Customer note</span><span class="r">${esc(o.note)}</span></div>` : ""}
-          <div class="kv-row"><span>Payment</span><span>${esc((PAYMENTS.find((p) => p.v === o.payment) || { l: o.payment || "" }).l)}</span></div>
+          <div class="kv-row kv-nolabel"><span>Payment</span><span>${esc((PAYMENTS.find((p) => p.v === o.payment) || { l: o.payment || "" }).l)}</span></div>
         </div>
-        <div class="card"><div class="card-head"><h3>${icon("settings")}Handling</h3></div>
+        <div class="card o-hand-card"><div class="card-head"><h3>${icon("settings")}Handling</h3></div>
           <div class="field"><label>Status</label><select data-set-status ${write ? "" : "disabled"}>${ORDER_STATUSES.map((s) => `<option value="${s.k}" ${s.k === o.status ? "selected" : ""}>${s.label}</option>`).join("")}</select></div>
           <div class="field"><label>Staff note (not shown to the customer)</label><textarea rows="2" data-staff-note ${write ? "" : "disabled"}>${esc(o.staffNote || "")}</textarea></div>
           ${invoice ? `<div class="kv-row"><span>Invoice</span><a href="#/sales/${esc(invoice.id)}">${icon("file")}${esc(invoice.number)}</a></div>`
             : o.status === "cancelled" ? "" : `<p class="small muted">No invoice yet. Create the invoice when the order goes out: stock and accounts update from the invoice.</p>`}
         </div>
-      </div>
-      <div class="card card-flush"><div class="table-wrap"><table class="tbl"><thead><tr><th>Item</th><th class="r">Qty</th><th class="r">Price</th><th class="r">Amount</th></tr></thead><tbody>
+      <div class="card card-flush o-items-card"><div class="table-wrap"><table class="tbl order-items"><thead><tr><th>Item</th><th class="r">Qty</th><th class="r">Price</th><th class="r">Amount</th></tr></thead><tbody>
         ${items.map((i) => {
           const p = products.get(i.productId);
-          return `<tr><td class="primary" data-label="Item">${esc(i.name || (p && p.name) || "")}${!p ? ` <small class="text-warn">not in Products</small>` : ""}</td><td class="r" data-label="Qty">${num(i.qty)} ${esc(i.unit || "")}</td><td class="r" data-label="Price">${money(i.price)}</td><td class="r" data-label="Amount"><b>${money((Number(i.qty) || 0) * (Number(i.price) || 0))}</b></td></tr>`;
+          return `<tr><td class="primary" data-label="Item">${esc(i.name || (p && p.name) || "")}${!p ? ` <small class="text-warn">not in Products</small>` : ""}</td><td class="r i-qty" data-label="Qty">${num(i.qty)} ${esc(i.unit || "")}</td><td class="r i-price" data-label="Price">${money(i.price)}</td><td class="r i-amt" data-label="Amount"><b>${money((Number(i.qty) || 0) * (Number(i.price) || 0))}</b></td></tr>`;
         }).join("")}
       </tbody></table></div>
       <div class="totals order-totals">
@@ -221,6 +219,7 @@ export const orderDetailView = {
         <div><span>Delivery</span><b>${money(o.deliveryCharge || 0)}</b></div>
         <div class="grand"><span>Total</span><b>${money(o.total)}</b></div>
       </div></div>
+      </div>
       ${o.channel === "online" ? `<p class="small muted">Prices come from the website at the time of the order. Confirm the total with the customer before delivery.</p>` : ""}`;
 
     const save = (patch, msg) => { store.put("orders", { id: o.id, ...patch }); toast(msg); };
