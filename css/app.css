@@ -636,3 +636,8 @@ body.modal-open { overflow: hidden; }
   .order-stats .stat-label { font-size: 12.5px; line-height: 1.2; }
   .order-stats .stat-value { margin: 0; font-size: 18px; }
 }
+/* Call button: phones and tablets only (a computer usually can't place the call) */
+.call-btn { display: none; }
+@media (max-width: 860px) {
+  .call-btn { display: inline-flex; color: var(--ok); border-color: color-mix(in srgb, var(--ok) 45%, transparent); }
+}
