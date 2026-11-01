@@ -583,3 +583,56 @@ body.modal-open { overflow: hidden; }
   .group-row { grid-template-columns: 1fr 38px; }
   .group-row .combo { grid-column: 1 / -1; }
 }
+
+/* Orders list and order page */
+.addr-sum { display: block; max-width: 280px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.o-name { display: block; }
+.order-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-areas: "cust hand" "items items"; gap: 16px; margin-bottom: 16px; }
+.order-grid > .card { margin-bottom: 0; min-width: 0; }
+.o-cust-card { grid-area: cust; }
+.o-hand-card { grid-area: hand; }
+.o-items-card { grid-area: items; }
+.only-sm-block { display: none !important; }
+.chip-btn { border: 0; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600; background: var(--info-soft); color: var(--info); }
+.order-totals { margin: 12px 16px 16px auto; padding: 12px 16px; background: var(--brand-soft); border: 1px solid color-mix(in srgb, var(--brand) 35%, transparent); border-radius: 12px; }
+.order-totals .grand { border-top-color: color-mix(in srgb, var(--brand) 35%, transparent); color: var(--brand-ink); }
+@media (max-width: 860px) {
+  .orders-page .page-head p { display: none; }
+  /* Order rows: number · date / name / address / status · channel / total */
+  .orders-tbl tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; row-gap: 2px; padding: 9px 14px; }
+  .orders-tbl td { padding: 0; }
+  .orders-tbl td::before { display: none; }
+  .orders-tbl td.primary { grid-column: 1; grid-row: 1; padding: 0; }
+  .orders-tbl .o-date { grid-column: 2; grid-row: 1; font-size: 13px; color: var(--muted); }
+  .orders-tbl .o-cust { grid-column: 1 / -1; grid-row: 2; text-align: left; }
+  .orders-tbl .o-name { font-weight: 600; }
+  .orders-tbl .addr-sum { max-width: none; font-size: 13px; }
+  .orders-tbl .o-status { grid-column: 1; grid-row: 3; text-align: left; padding-top: 3px; }
+  .orders-tbl .o-chan { grid-column: 2; grid-row: 3; padding-top: 3px; }
+  .orders-tbl .o-inv { display: none; }
+  .orders-tbl .o-total { grid-column: 1 / -1; grid-row: 4; padding-top: 2px; }
+  .orders-tbl .o-total::before { display: block; }
+  /* Order page: customer, items, then handling */
+  .order-grid { grid-template-columns: minmax(0, 1fr); grid-template-areas: "cust" "items" "hand"; }
+  .only-sm-block { display: flex !important; }
+  .o-cust-card .card-head { margin-bottom: 6px; }
+  .o-cust-card .card-head h3 { font-size: 17px; }
+  .kv-nolabel { justify-content: flex-start; padding: 4px 0; border-bottom: 0; }
+  .kv-nolabel > span:first-child { display: none; }
+  .kv-nolabel .r { text-align: left; }
+  /* Item rows: name, then qty × price = amount on one line */
+  .order-items tr { display: grid; grid-template-columns: auto auto minmax(0, 1fr); column-gap: 10px; padding: 9px 14px; }
+  .order-items td { padding: 0; }
+  .order-items td::before { display: none; }
+  .order-items td.primary { grid-column: 1 / -1; padding-bottom: 2px; }
+  .order-items .i-qty, .order-items .i-price { text-align: left; color: var(--ink-2); }
+  .order-items .i-price::before { display: inline; float: none; content: "× "; margin: 0; font-size: inherit; color: inherit; }
+  .order-items .i-amt { text-align: right; }
+  .order-totals { margin: 12px; max-width: none; }
+}
+@media (max-width: 640px) {
+  /* Label and count on one line */
+  .order-stats .stat { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; }
+  .order-stats .stat-label { font-size: 12.5px; line-height: 1.2; }
+  .order-stats .stat-value { margin: 0; font-size: 18px; }
+}

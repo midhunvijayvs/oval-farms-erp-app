@@ -22,7 +22,7 @@ import { seedWebsiteProducts } from "./seed-products.js";
 import { seedDeliveryZones } from "./delivery.js";
 import { deliveryView } from "./views/delivery.js";
 
-window.OVAL_VERSION = "2.1.0";
+window.OVAL_VERSION = "2.1.1";
 const cfg = window.OVAL_CONFIG || {};
 const LS = {
   get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },
