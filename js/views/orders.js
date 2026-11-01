@@ -192,6 +192,7 @@ export const orderDetailView = {
           ${write && next ? `<button class="btn btn-primary" data-next>${icon("tick")}${NEXT_LABEL[o.status]}</button>` : ""}
           ${write && !invoice && o.status !== "cancelled" ? `<a class="btn btn-ghost" href="#/sales/new?order=${encodeURIComponent(o.id)}">${icon("file")}Create invoice</a>` : ""}
           ${write && !invoice ? `<a class="btn btn-ghost" href="#/orders/${encodeURIComponent(o.id)}/edit">${icon("edit")}Edit order</a>` : ""}
+          ${c.phone || (cust && cust.phone) ? `<a class="btn btn-ghost call-btn" href="tel:${esc(String(c.phone || cust.phone).replace(/[^\d+]/g, ""))}">${icon("phone")}Call</a>` : ""}
         </div></div>
       <div class="order-grid">
         <div class="card o-cust-card"><div class="card-head"><h3 class="hide-sm">${icon("users")}Customer</h3><h3 class="only-sm-block">${esc(customerName(o))}</h3>${cust && cust.type ? `<button class="chip chip-btn" data-cust title="Open the customer's details">${esc(cust.type)}</button>` : ""}</div>
