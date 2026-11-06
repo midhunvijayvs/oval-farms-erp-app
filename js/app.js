@@ -1,7 +1,7 @@
 // App entry: splash -> Google sign-in -> team check -> shell with navigation and routes.
 import { store } from "./store.js";
 import { googleToken } from "./google.js";
-import { session, can, touchStaff, ROLES, currentRole, userKey } from "./session.js";
+import { session, can, touchStaff, ROLES, currentRole, userKey, isInvestor } from "./session.js";
 import { schemas } from "./schema.js";
 import { icon } from "./icons.js";
 import { esc } from "./util.js";
@@ -21,8 +21,9 @@ import { seedDemo } from "./seed.js";
 import { seedWebsiteProducts } from "./seed-products.js";
 import { seedDeliveryZones } from "./delivery.js";
 import { deliveryView } from "./views/delivery.js";
+import { investmentsView, investorView, myInvestmentsView } from "./views/investments.js";
 
-window.OVAL_VERSION = "2.1.2";
+window.OVAL_VERSION = "2.2.0";
 const cfg = window.OVAL_CONFIG || {};
 const LS = {
   get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },
@@ -60,6 +61,8 @@ const NAV = [
   { section: "Finance", perm: "finance", items: [
     { href: "#/expenses", label: "Expenses", ic: "receipt" },
     { href: "#/payments", label: "Payments", ic: "wallet" },
+    { href: "#/investments", label: "Investments", ic: "trend", perm: "investments" },
+    { href: "#/my-investments", label: "My investments", ic: "users", perm: "investor" },
   ] },
   { section: "People", items: [
     { href: "#/attendance", label: "Attendance", ic: "calendar" },
@@ -117,6 +120,9 @@ function setupRoutes() {
   route("/delivery", deliveryView);
   route("/reports", reportsView, { allow: () => can("reports") });
   route("/settings", settingsView);
+  route("/investments", investmentsView, { allow: () => can("investments") });
+  route("/investments/investor/:id", investorView, { allow: () => can("investments") });
+  route("/my-investments", myInvestmentsView, { allow: () => isInvestor() });
 }
 
 // ---------------- screens ----------------
@@ -184,7 +190,7 @@ async function afterSignIn(user) {
   if (!me) return showNoAccess();
   session.role = me.role;
   await store.open("firebase", session.user, firebase.backend);
-  await firebase.startSync();
+  await firebase.startSync({ investorEmail: me.role === "investor" ? userKey(session.user.email) : "" });
   touchStaff();
   if (can("admin") && !store.all("products").length) {
     const n = seedWebsiteProducts();
@@ -238,7 +244,7 @@ let shellMounted = false;
 function navHtml() {
   return NAV.filter((g) => !g.perm || can(g.perm)).map((g) => `
     ${g.section ? `<div class="nav-section">${g.section}</div>` : ""}
-    ${g.items.map((i) => `<a href="${i.href}" class="nav-link" data-nav="${i.href}">${icon(i.ic)}<span>${i.label}</span>${i.badge ? `<b class="nav-badge" data-badge="${i.badge}" hidden></b>` : ""}</a>`).join("")}`).join("");
+    ${g.items.filter((i) => !i.perm || can(i.perm)).map((i) => `<a href="${i.href}" class="nav-link" data-nav="${i.href}">${icon(i.ic)}<span>${i.label}</span>${i.badge ? `<b class="nav-badge" data-badge="${i.badge}" hidden></b>` : ""}</a>`).join("")}`).join("");
 }
 
 function mountShell() {

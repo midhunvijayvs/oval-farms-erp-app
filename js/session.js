@@ -3,12 +3,18 @@
 // enforce the same roles, so the menus here only hide what someone couldn't do anyway.
 import { store } from "./store.js";
 
+// investments: sees the investments page (only admins add or change investments).
+// investor: like Viewer (looks at everything, changes nothing), but other investors appear only
+// by their investor ID, never by name.
 export const ROLES = {
-  admin:   { label: "Admin",   write: true,  delete: true,  finance: true,  reports: true,  admin: true },
-  manager: { label: "Manager", write: true,  delete: true,  finance: true,  reports: true,  admin: false },
-  staff:   { label: "Staff",   write: true,  delete: false, finance: false, reports: false, admin: false },
-  viewer:  { label: "Viewer",  write: false, delete: false, finance: true,  reports: true,  admin: false },
+  admin:    { label: "Admin",    write: true,  delete: true,  finance: true,  reports: true,  admin: true,  investments: true },
+  manager:  { label: "Manager",  write: true,  delete: true,  finance: true,  reports: true,  admin: false },
+  staff:    { label: "Staff",    write: true,  delete: false, finance: false, reports: false, admin: false },
+  viewer:   { label: "Viewer",   write: false, delete: false, finance: true,  reports: true,  admin: false, investments: true },
+  investor: { label: "Investor", write: false, delete: false, finance: true,  reports: true,  admin: false, investments: true, investor: true },
 };
+
+export const isInvestor = () => currentRole() === "investor";
 
 // mode: off | firebase | demo
 export const session = { user: null, mode: "off", role: "" };

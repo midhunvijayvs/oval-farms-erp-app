@@ -6,6 +6,7 @@ import { fbState } from "../firebase.js";
 import { esc, fmtDate, today, downloadFile } from "../util.js";
 import { icon } from "../icons.js";
 import { pageHead, toast, confirmDialog } from "../ui.js";
+import { nextInvestorNo } from "./investments.js";
 
 const st = { tab: "business" };
 const LIST_LABELS = {
@@ -53,6 +54,7 @@ function tabTeam() {
     </div></div>
     ${admin ? `<div class="card"><div class="form-grid">
       <div class="field half"><label>Google account email</label><input type="email" data-new-email placeholder="name@gmail.com" autocomplete="off"></div>
+      <div class="field half"><label>Name</label><input data-new-name placeholder="Shown until they sign in" autocomplete="off"></div>
       <div class="field half"><label>Role</label><select data-new-role>${Object.entries(ROLES).map(([k, r]) => `<option value="${k}" ${k === "staff" ? "selected" : ""}>${r.label}</option>`).join("")}</select></div>
     </div><div class="form-actions"><button class="btn btn-primary" data-add-member>${icon("plus")}Add to team</button></div></div>` : ""}
     <div class="card card-flush"><div class="table-wrap"><table class="tbl"><thead><tr><th>Person</th><th>Role</th><th>Last active</th>${admin ? "<th></th>" : ""}</tr></thead><tbody>
@@ -63,10 +65,11 @@ function tabTeam() {
     </tbody></table></div></div>
     <div class="card"><h3>What each role can do</h3>
       <ul class="role-list">
-        <li><b>Admin</b> · everything, including the team list.</li>
-        <li><b>Manager</b> · everything except the team list.</li>
+        <li><b>Admin</b> · everything, including the team list and investments.</li>
+        <li><b>Manager</b> · everything except the team list and investments.</li>
         <li><b>Staff</b> · production, harvests, stock, orders, sales and attendance. Cannot see expenses, payments list or reports, and cannot delete.</li>
-        <li><b>Viewer</b> · can look at everything, cannot change anything.</li>
+        <li><b>Viewer</b> · can look at everything, including investments, cannot change anything.</li>
+        <li><b>Investor</b> · like Viewer: can look at everything, cannot change anything. In Investments, other investors show only by their investor ID, never by name.</li>
       </ul>
       <p class="muted small">The database's security rules enforce these roles too.</p>
     </div>`;
@@ -148,7 +151,9 @@ export const settingsView = {
       const email = userKey(q("[data-new-email]").value.trim());
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { toast("Enter their Google account email", "error"); q("[data-new-email]").focus(); return; }
       if (store.get("staff", email)) { toast(`${email} is already on the team`, "error"); return; }
-      store.put("staff", { id: email, email, role: q("[data-new-role]").value });
+      const name = q("[data-new-name]").value.trim().slice(0, 100);
+      const role = q("[data-new-role]").value;
+      store.put("staff", { id: email, email, role, ...(name ? { name } : {}), ...(role === "investor" ? { investorNo: nextInvestorNo() } : {}) });
       toast(`${email} added. Send them the app link.`);
       rr();
     });
@@ -159,7 +164,8 @@ export const settingsView = {
       rr();
     }));
     root.querySelectorAll("[data-role]").forEach((sel) => sel.addEventListener("change", () => {
-      store.put("staff", { id: sel.dataset.role, role: sel.value });
+      const m = store.get("staff", sel.dataset.role);
+      store.put("staff", { id: sel.dataset.role, role: sel.value, ...(sel.value === "investor" && m && !m.investorNo ? { investorNo: nextInvestorNo() } : {}) });
       toast("Role updated");
     }));
     if (q("[data-savelists]")) q("[data-savelists]").addEventListener("click", () => {

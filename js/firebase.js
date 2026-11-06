@@ -16,7 +16,7 @@ const cfg = window.OVAL_CONFIG || {};
 export const COLLECTIONS = [
   "settings", "staff", "products", "catalog", "customers", "customerInvites", "orders",
   "batches", "harvests", "productions", "adjustments", "sales", "purchases", "suppliers",
-  "expenses", "payments", "employees", "attendance", "tasks", "delivery", "productGroups",
+  "expenses", "payments", "employees", "attendance", "tasks", "delivery", "productGroups", "investments",
 ];
 const TIME_FIELDS = new Set(["createdAt", "updatedAt"]);
 
@@ -149,15 +149,19 @@ export const backend = {
 
 // Starts a listener per collection. Resolves once every collection has loaded (from the device
 // cache or the server), or after a few seconds so a slow connection doesn't block the app.
-export function startSync() {
+// An investor (investorEmail set) gets everything except the team list: only their own team
+// record, so other investors' names stay hidden.
+export function startSync({ investorEmail = "" } = {}) {
   stopSync();
-  let waiting = COLLECTIONS.length;
+  const sources = COLLECTIONS.map((name) => ({ name, ref: investorEmail && name === "staff" ? sdk.doc(db, "staff", investorEmail) : sdk.collection(db, name) }));
+  let waiting = sources.length;
   const ready = new Promise((resolve) => {
     const done = () => { if (--waiting === 0) resolve(); };
-    for (const name of COLLECTIONS) {
+    for (const { name, ref } of sources) {
       let first = true;
-      const off = sdk.onSnapshot(sdk.collection(db, name), (snap) => {
-        const changes = snap.docChanges().map((ch) => ({ id: ch.doc.id, data: ch.type === "removed" ? null : toPlain(ch.doc.data({ serverTimestamps: "estimate" })) }));
+      const off = sdk.onSnapshot(ref, (snap) => {
+        const changes = snap.docChanges ? snap.docChanges().map((ch) => ({ id: ch.doc.id, data: ch.type === "removed" ? null : toPlain(ch.doc.data({ serverTimestamps: "estimate" })) }))
+          : [{ id: snap.id, data: snap.exists() ? toPlain(snap.data({ serverTimestamps: "estimate" })) : null }];
         if (changes.length || first) store.applyRemote(name, changes);
         if (first) { first = false; done(); }
       }, (e) => {
