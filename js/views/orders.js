@@ -28,7 +28,17 @@ const OPEN = ["placed", "confirmed", "packed", "out_for_delivery"];
 const NEXT = { placed: "confirmed", confirmed: "packed", packed: "out_for_delivery", out_for_delivery: "delivered" };
 const NEXT_LABEL = { placed: "Confirm order", confirmed: "Mark packed", packed: "Out for delivery", out_for_delivery: "Mark delivered" };
 const PAYMENTS = [{ v: "cod", l: "Cash / UPI on delivery" }, { v: "paid", l: "Paid already" }, { v: "credit", l: "On credit (invoice)" }];
-const TABS = [{ k: "open", label: "Open" }, { k: "all", label: "All" }, ...ORDER_STATUSES];
+const TABS = [{ k: "open", label: "Open" }, { k: "all", label: "All" }, ...ORDER_STATUSES.slice(0, 5), { k: "unpaid_delivered", label: "Unpaid deliveries" }, ORDER_STATUSES[5]];
+
+// Paid / Partly paid / Unpaid. An order is unpaid until it is invoiced; after that it follows the
+// payments recorded against its invoice. Cancelled orders have none.
+export function orderPayment(o) {
+  if (o.status === "cancelled") return "";
+  const inv = o.invoiceId ? store.get("sales", o.invoiceId) : null;
+  return inv ? calc.paymentStatus(inv) : "Unpaid";
+}
+const PAY_TONE = { Paid: "ok", "Partly paid": "warn", Unpaid: "danger" };
+export const payChip = (o) => { const p = orderPayment(o); return p ? chip(p, PAY_TONE[p]) : ""; };
 
 // Same number on the website and in the ERP, e.g. OF-7Q2KX9
 export const orderNo = (o) => "OF-" + String(o.id).slice(0, 6).toUpperCase();
@@ -53,6 +63,7 @@ const st = { q: "", tab: "open" };
 function matchesTab(o, tab) {
   if (tab === "open") return OPEN.includes(o.status);
   if (tab === "all") return true;
+  if (tab === "unpaid_delivered") return o.status === "delivered" && orderPayment(o) !== "Paid";
   return o.status === tab;
 }
 
@@ -80,16 +91,17 @@ export const ordersView = {
         <div class="search">${icon("search")}<input type="search" placeholder="Search order no., name, phone, place or invoice…" value="${esc(st.q)}" data-q></div>
       </div>
       <div class="card card-flush">
-        ${rows.length ? `<div class="table-wrap"><table class="tbl orders-tbl"><thead><tr><th>Order</th><th>Placed</th><th>Customer</th><th>Channel</th><th>Status</th><th>Invoice</th><th class="r">Total</th></tr></thead><tbody>
+        ${rows.length ? `<div class="table-wrap"><table class="tbl orders-tbl"><thead><tr><th>Order</th><th>Placed</th><th>Customer</th><th>Channel</th><th>Status</th><th>Payment</th><th>Invoice</th><th class="r">Total</th></tr></thead><tbody>
           ${rows.map((o) => `<tr class="clickable" data-id="${esc(o.id)}">
             <td class="primary" data-label="Order">${esc(orderNo(o))}</td>
             <td class="o-date" data-label="Placed">${esc(when(o.createdAt))}</td>
             <td class="o-cust" data-label="Customer"><span class="o-name">${esc(customerName(o))}</span><small class="muted addr-sum">${esc(addressSummary(o.address)) || "Pick-up"}</small></td>
             <td class="o-chan" data-label="Channel">${chip(channelLabel(o))}</td>
             <td class="o-status" data-label="Status">${statusChip(o.status)}</td>
+            <td class="o-pay" data-label="Payment">${payChip(o)}</td>
             <td class="o-inv" data-label="Invoice">${o.invoiceNumber ? esc(o.invoiceNumber) : o.status === "cancelled" ? "" : `<span class="muted">Not yet</span>`}</td>
             <td class="r o-total" data-label="Total"><b>${money(o.total)}</b></td></tr>`).join("")}
-        </tbody></table></div>` : emptyState(st.tab === "open" ? "No open orders right now." : "No orders here.", can("write") && !all.length ? `<a class="btn btn-primary" href="#/orders/new">${icon("plus")}Add the first order</a>` : "")}
+        </tbody></table></div>` : emptyState(st.tab === "open" ? "No open orders right now." : st.tab === "unpaid_delivered" ? "Every delivered order is paid." : "No orders here.", can("write") && !all.length ? `<a class="btn btn-primary" href="#/orders/new">${icon("plus")}Add the first order</a>` : "")}
       </div>
       ${can("write") ? `<a class="fab" href="#/orders/new" aria-label="New order">${icon("plus")}</a>` : ""}</div>`;
 
@@ -206,6 +218,7 @@ export const orderDetailView = {
         <div class="card o-hand-card"><div class="card-head"><h3>${icon("settings")}Handling</h3></div>
           <div class="field"><label>Status</label><select data-set-status ${write ? "" : "disabled"}>${ORDER_STATUSES.map((s) => `<option value="${s.k}" ${s.k === o.status ? "selected" : ""}>${s.label}</option>`).join("")}</select></div>
           <div class="field"><label>Staff note (not shown to the customer)</label><textarea rows="2" data-staff-note ${write ? "" : "disabled"}>${esc(o.staffNote || "")}</textarea></div>
+          ${o.status !== "cancelled" ? `<div class="kv-row"><span>Payment status</span><span>${payChip(o)}${invoice && calc.docBalance(invoice) > 0.009 && calc.paidAgainst(invoice.id) > 0 ? ` <small class="muted">${money(calc.docBalance(invoice))} due</small>` : ""}</span></div>` : ""}
           ${invoice ? `<div class="kv-row"><span>Invoice</span><a href="#/sales/${esc(invoice.id)}">${icon("file")}${esc(invoice.number)}</a></div>`
             : o.status === "cancelled" ? "" : `<p class="small muted">No invoice yet. Create the invoice when the order goes out: stock and accounts update from the invoice.</p>`}
         </div>

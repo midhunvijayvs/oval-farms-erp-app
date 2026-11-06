@@ -8,7 +8,7 @@ import { openModal, toast, confirmDialog, fieldHtml, defaultsFor, readFields, va
 import * as calc from "../calc.js";
 import { productHooks } from "./products.js";
 import { customerHooks } from "./customers.js";
-import { uploadProductImage } from "../firebase.js";
+import { uploadImage } from "../firebase.js";
 
 const state = {};
 
@@ -96,7 +96,9 @@ export function openForm(key, rec = null, { presets = {}, onSaved } = {}) {
     let merged = { ...data, ...vals };
     // Hidden fields are cleared, except ones marked keepWhenHidden (website details of an unpublished product).
     for (const f of sc.fields) if (f.showIf && !f.showIf(merged) && !f.keepWhenHidden && !f.virtual) merged[f.k] = "";
-    if (!validate(form, sc.fields, merged)) return true;
+    // A bill photo alone is enough to save (fill in the rest later, looking at the photo).
+    const photoOnly = sc.photoField && Array.isArray(merged[sc.photoField]) && merged[sc.photoField].length;
+    if (!photoOnly && !validate(form, sc.fields, merged)) return true;
     const extra = {};
     for (const f of sc.fields) if (f.virtual) { extra[f.k] = merged[f.k]; delete merged[f.k]; }
     if (h.beforeSave) {
@@ -105,7 +107,7 @@ export function openForm(key, rec = null, { presets = {}, onSaved } = {}) {
     }
     const saved = store.put(key, merged);
     if (h.afterSave) h.afterSave(saved, prev, extra);
-    toast(sc.singular + (isNew ? " added" : " saved"));
+    toast(sc.singular + (isNew ? " added" : " saved") + (photoOnly && sc.needsDetails && sc.needsDetails(saved) ? ". Fill in the details later from the photo." : ""));
     if (onSaved) onSaved(saved);
     return false;
   } });
@@ -256,7 +258,7 @@ function bindPacks(form, f) {
   if (unitSel) unitSel.addEventListener("change", () => box.querySelectorAll("[data-pack-unit]").forEach((b) => { b.textContent = unit(); }));
 }
 
-function bindImages(form, f, ownerId) {
+export function bindImages(form, f, ownerId) {
   const box = form.querySelector(`[data-images="${f.k}"]`);
   if (!box) return;
   const input = box.querySelector(`input[name="${f.k}"]`);
@@ -280,13 +282,14 @@ function bindImages(form, f, ownerId) {
       else if (url) toast("That doesn't look like a web address", "error");
     }
   });
-  box.querySelector("[data-img-file]").addEventListener("change", async (e) => {
+  const folder = f.folder || `products/${ownerId}`;
+  box.querySelectorAll("[data-img-file]").forEach((inp) => inp.addEventListener("change", async (e) => {
     const files = [...e.target.files];
     e.target.value = "";
     for (const file of files) {
-      msg.textContent = `Uploading ${file.name}…`;
-      try { set([...get(), await uploadProductImage(file, ownerId)]); msg.textContent = ""; }
+      msg.textContent = `Uploading ${file.name || "photo"}…`;
+      try { set([...get(), await uploadImage(file, folder)]); msg.textContent = ""; }
       catch (err) { msg.textContent = ""; toast(err.message, "error"); break; }
     }
-  });
+  }));
 }

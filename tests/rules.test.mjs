@@ -170,6 +170,34 @@ await t("investor cannot change settings", assertFails(setDoc(doc(ravi, "setting
 await t("investor cannot add team members", assertFails(setDoc(doc(ravi, "staff/x@gmail.com"), { email: "x@gmail.com", role: "admin" })));
 await t("admin deletes an investment", assertSucceeds(deleteDoc(doc(owner, "investments/i2"))));
 
+// Notes: Admins and Managers only
+await t("admin writes a note", assertSucceeds(setDoc(doc(owner, "notes/n1"), { title: "Hygiene", body: "Wash hands", ...ts })));
+await t("manager writes a note", assertSucceeds(setDoc(doc(manager, "notes/n2"), { title: "Taxi", body: "9847012345", ...ts })));
+await t("manager reads notes", assertSucceeds(getDocs(collection(manager, "notes"))));
+await t("manager deletes a note", assertSucceeds(deleteDoc(doc(manager, "notes/n2"))));
+await t("staff cannot read notes", assertFails(getDocs(collection(worker, "notes"))));
+await t("staff cannot write notes", assertFails(setDoc(doc(worker, "notes/n3"), { title: "x" })));
+await t("viewer cannot read notes", assertFails(getDoc(doc(viewer, "notes/n1"))));
+await t("investor cannot read notes", assertFails(getDocs(collection(ravi, "notes"))));
+await t("customer cannot read notes", assertFails(getDoc(doc(carol, "notes/n1"))));
+
+// Activity log: everyone adds entries about themselves; only admins read; nobody edits
+const entry = (uid, email, extra = {}) => ({ uid, email, at: serverTimestamp(), app: "erp", action: "Changed", what: "orders", label: "OF-1", fields: ["status"], name: "X", phone: "", ip: "1.2.3.4", device: "Chrome", ...extra });
+await t("staff logs their own change", assertSucceeds(setDoc(doc(worker, "logs/l1"), entry("wrk", "worker@gmail.com"))));
+await t("customer logs their own sign-up", assertSucceeds(setDoc(doc(carol, "logs/l2"), entry("carol", "carol@example.com", { app: "site", action: "Signed up", what: "account" }))));
+await t("phone-only customer logs with no email", assertSucceeds(setDoc(doc(env.authenticatedContext("phoneonly", { phone_number: "+919800000000" }).firestore(), "logs/l2b"), entry("phoneonly", "", { app: "site", action: "Signed in" }))));
+await t("cannot log as someone else", assertFails(setDoc(doc(worker, "logs/l3"), entry("mgr", "manager@gmail.com"))));
+await t("cannot log under another email", assertFails(setDoc(doc(worker, "logs/l4"), entry("wrk", "manager@gmail.com"))));
+await t("cannot backdate a log entry", assertFails(setDoc(doc(worker, "logs/l5"), { ...entry("wrk", "worker@gmail.com"), at: new Date("2020-01-01") })));
+await t("cannot add unknown fields to a log entry", assertFails(setDoc(doc(worker, "logs/l6"), entry("wrk", "worker@gmail.com", { role: "admin", extra: 1 }))));
+await t("signed-out visitors cannot log", assertFails(setDoc(doc(env.unauthenticatedContext().firestore(), "logs/l7"), entry("x", ""))));
+await t("admin reads the log", assertSucceeds(getDocs(collection(owner, "logs"))));
+await t("manager cannot read the log", assertFails(getDocs(collection(manager, "logs"))));
+await t("staff cannot read the log", assertFails(getDoc(doc(worker, "logs/l1"))));
+await t("customer cannot read the log", assertFails(getDoc(doc(carol, "logs/l2"))));
+await t("nobody changes a log entry", assertFails(updateDoc(doc(owner, "logs/l1"), { action: "Nothing" })));
+await t("nobody deletes a log entry", assertFails(deleteDoc(doc(owner, "logs/l1"))));
+
 await t("other collections closed", assertFails(getDoc(doc(owner, "secrets/x"))));
 
 await env.cleanup();

@@ -4,9 +4,9 @@ import { SALE_STATUSES, PURCHASE_STATUSES } from "../schema.js";
 import { can } from "../session.js";
 import { esc, money, num, sum, today, addDays, fmtDate, inRange, monthStart, round2, toCSV, downloadFile } from "../util.js";
 import { icon } from "../icons.js";
-import { toast, confirmDialog, pageHead, chip, emptyState, stat } from "../ui.js";
+import { toast, confirmDialog, pageHead, chip, emptyState, stat, fieldHtml } from "../ui.js";
 import * as calc from "../calc.js";
-import { openForm } from "./crud.js";
+import { openForm, bindImages } from "./crud.js";
 import { navigate } from "../router.js";
 import { orderNo, addressText } from "./orders.js";
 import { sellables, findPack, sellName, keyOf, splitKey } from "../packs.js";
@@ -19,6 +19,12 @@ export function lineName(l, product) {
   const k = findPack(product, l.packId);
   return k ? sellName(product, k) : l.packName ? `${product.name} – ${l.packName}` : product.name;
 }
+
+// Purchase bills: a photo of the supplier's bill. With only the photo the bill is saved as
+// "To fill in" (status Ordered, so stock and accounts don't change) and completed later.
+const BILL_PHOTO = { k: "billPhotos", label: "Photo of the supplier's bill", type: "images", camera: true, folder: "bills/purchases", hint: "Busy? Just take the photo and save. Fill in the rest later." };
+const photosOf = (d) => (Array.isArray(d && d.billPhotos) ? d.billPhotos : []);
+export const purchaseNeedsDetails = (d) => !!d.needsDetails;
 
 export const DOCS = {
   sales: {
@@ -75,7 +81,7 @@ export function docList(kind) {
               <td class="primary" data-label="Number">${esc(r.number)}</td>
               <td data-label="Date">${fmtDate(r.date)}</td>
               <td data-label="${D.partyLabel}">${esc(r._party || "Walk-in")}</td>
-              <td data-label="Status">${chip(r.status)}</td>
+              <td data-label="Status">${r.needsDetails ? '<span class="chip chip-warn">To fill in</span>' : chip(r.status)}${photosOf(r).length ? ' <span class="muted" title="Bill photo attached">📷</span>' : ""}</td>
               <td data-label="Payment">${D.counts(r) ? chip(r._pay) : ""}</td>
               <td class="r" data-label="Total"><b>${money(r._t.total)}</b></td></tr>`).join("")}
           </tbody></table></div>` : emptyState(`No ${D.title.toLowerCase()} yet.`, can("write") ? `<a class="btn btn-primary" href="#/${D.route}/new">${icon("plus")}Create the first one</a>` : "")}
@@ -174,6 +180,7 @@ export function docEditor(kind) {
           <div class="editor">
             <div class="card">
               <div class="form-grid">
+                ${kind === "purchases" ? fieldHtml(BILL_PHOTO, photosOf(doc), doc) : ""}
                 ${isSale ? (() => {
                   const choices = orderChoices();
                   return `<div class="field"><label>Order <span class="req">*</span></label>
@@ -217,6 +224,8 @@ export function docEditor(kind) {
       };
 
       const readHeader = () => {
+        const ph = root.querySelector('input[name="billPhotos"]');
+        if (ph) { try { doc.billPhotos = JSON.parse(ph.value || "[]"); } catch (e) { /* keep */ } }
         root.querySelectorAll("[data-h]").forEach((el) => {
           const k = el.dataset.h;
           doc[k] = el.type === "checkbox" ? el.checked : el.type === "number" ? (el.value === "" ? "" : Number(el.value)) : el.value;
@@ -224,6 +233,7 @@ export function docEditor(kind) {
       };
 
       const bind = () => {
+        if (kind === "purchases") bindImages(root, BILL_PHOTO, "");
         root.querySelectorAll("[data-h]").forEach((el) => el.addEventListener("change", () => { readHeader(); if (el.dataset.h === "shipping" || el.dataset.h === D.partyKey) draw(); }));
         const os = root.querySelector("[data-order]");
         if (os) os.addEventListener("change", () => {
@@ -271,6 +281,14 @@ export function docEditor(kind) {
         root.querySelector("[data-save]").addEventListener("click", () => {
           readHeader();
           doc.lines = doc.lines.filter((l) => l.itemId || l.description);
+          // Only a photo so far: save it now, finish it later.
+          if (kind === "purchases" && photosOf(doc).length && (!doc.lines.length || !doc[D.partyKey])) {
+            if (!doc.lines.length) doc.lines = [];
+            const saved = store.put(D.col, { ...doc, needsDetails: true, status: "Ordered" });
+            toast("Bill photo saved. Fill in the details later from the photo.");
+            return navigate(`#/${D.route}/${saved.id}`, true);
+          }
+          if (kind === "purchases" && doc.needsDetails) { doc.needsDetails = false; if (doc.status === "Ordered") doc.status = "Received"; }
           if (!doc.lines.length) { doc.lines = [{ qty: 1 }]; draw(); return toast("Add at least one item", "error"); }
           if (kind === "purchases" && !doc[D.partyKey]) return toast("Choose a supplier", "error");
           if (isSale && !doc.orderId && !(existing && !existing.orderId)) return toast("Choose the order this invoice is for", "error");
@@ -393,7 +411,7 @@ export function docView(kind) {
 
       root.innerHTML = `
         <div class="page-head no-print">
-          <div><a class="back" href="#/${D.route}">${icon("back")}${D.title}</a><h1>${esc(doc.number)} ${chip(doc.status)} ${D.counts(doc) ? chip(calc.paymentStatus(doc)) : ""}</h1></div>
+          <div><a class="back" href="#/${D.route}">${icon("back")}${D.title}</a><h1>${esc(doc.number)} ${doc.needsDetails ? '<span class="chip chip-warn">To fill in</span>' : chip(doc.status)} ${D.counts(doc) ? chip(calc.paymentStatus(doc)) : ""}</h1></div>
           <div class="page-actions">
             ${can("write") && D.counts(doc) && balance > 0 ? `<button class="btn btn-primary" data-pay>${icon("wallet")}${isSale ? "Record payment" : "Record payment made"}</button>` : ""}
             ${can("write") ? `<a class="btn btn-ghost" href="#/${D.route}/${doc.id}/edit">${icon("edit")}Edit</a>` : ""}
@@ -430,7 +448,7 @@ export function docView(kind) {
             </header>
             <section class="paper-party">
               <span class="label">${isSale ? "Bill to" : "Supplier"}</span>
-              <b>${esc(party ? party.name : "Walk-in customer")}</b>
+              <b>${esc(party ? party.name : isSale ? "Walk-in customer" : "Not filled in yet")}</b>
               ${party && party.address ? `<p>${esc(party.address).replace(/\n/g, "<br>")}</p>` : ""}
               ${party && party.phone ? `<p>Ph: ${esc(party.phone)}</p>` : ""}
               ${party && party.gstin ? `<p>GSTIN: ${esc(party.gstin)}</p>` : ""}
@@ -467,6 +485,9 @@ export function docView(kind) {
             <p class="paper-thanks">${isSale ? "Thank you for your business!" : ""}</p>
           </article>
           <aside class="doc-side no-print">
+            ${!isSale && (photosOf(doc).length || doc.needsDetails) ? `<div class="card bill-photo-card"><h3>${icon("camera")}Bill photo</h3>
+              ${doc.needsDetails ? `<p class="small text-warn">Only the photo was saved. ${can("write") ? `<a href="#/${D.route}/${doc.id}/edit">Fill in the details</a>.` : ""}</p>` : ""}
+              <div class="img-list">${photosOf(doc).map((u) => `<a class="img-thumb" href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="Bill photo" loading="lazy"></a>`).join("")}</div></div>` : ""}
             <div class="card">
               <div class="card-head"><h3>Payments</h3></div>
               ${pays.length ? `<div class="mini-list">${pays.map((p) => `<div class="clickable" data-payid="${p.id}"><span>${fmtDate(p.date)} · ${esc(p.mode || "")}</span><b>${money(p.amount)}</b></div>`).join("")}</div>` : `<p class="muted">No payments recorded yet.</p>`}

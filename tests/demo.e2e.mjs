@@ -297,6 +297,76 @@ for (const vp of [{ width: 1280, height: 860 }, { width: 390, height: 844 }]) {
   await page.waitForSelector("tr[data-id]");
   check((await page.textContent("thead")).includes("On order"), `${tag}: stock shows quantities on order`);
 
+  // Orders: payment badge on each order, and the unpaid deliveries tab
+  await page.goto(BASE + "#/orders");
+  await page.click('[data-tab="all"]');
+  await page.waitForSelector(".orders-tbl .o-pay");
+  const pays = await page.$$eval(".orders-tbl .o-pay", (els) => els.map((e) => e.textContent.trim()));
+  check(pays.includes("Paid") && pays.includes("Partly paid") && pays.includes("Unpaid"), `${tag}: orders show paid, partly paid and unpaid (${[...new Set(pays)].join(", ")})`);
+  await page.screenshot({ path: `${OUT}/orders-payment-${tag}.png`, fullPage: true });
+  await page.click('[data-tab="unpaid_delivered"]');
+  await page.waitForTimeout(150);
+  const unpaid = await page.$$eval(".orders-tbl tbody tr", (rows) => rows.map((r) => [r.querySelector(".o-status").textContent.trim(), r.querySelector(".o-pay").textContent.trim()]));
+  check(unpaid.length === 3 && unpaid.every(([s, p]) => s === "Delivered" && p !== "Paid"), `${tag}: unpaid deliveries tab lists the 3 delivered orders not fully paid (${JSON.stringify(unpaid)})`);
+  await page.screenshot({ path: `${OUT}/orders-unpaid-${tag}.png`, fullPage: true });
+  await page.click('[data-tab="open"]');
+
+  // Expense saved with only a photo of the bill
+  await page.goto(BASE + "#/expenses");
+  await page.click("[data-new]:visible");
+  await page.waitForSelector(".modal .bill-photos");
+  check(!!(await page.$('.modal .bill-photos input[capture="environment"]')), `${tag}: expense bill photo button opens the camera`);
+  await page.setInputFiles('.modal .bill-photos input[capture="environment"]', { name: "bill.png", mimeType: "image/png", buffer: PIXEL });
+  await page.waitForSelector(".modal .bill-photos .img-thumb img");
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${OUT}/expense-photo-${tag}.png` });
+  await page.click(".modal-foot .btn-primary");
+  await page.waitForTimeout(300);
+  check(!(await page.$(".modal")) && (await view()).includes("To fill in"), `${tag}: expense saved with only the bill photo, marked to fill in`);
+  await page.screenshot({ path: `${OUT}/expenses-tofill-${tag}.png`, fullPage: true });
+
+  // Purchase bill saved with only a photo
+  await page.goto(BASE + "#/purchases/new");
+  await page.waitForSelector(".bill-photos");
+  await page.setInputFiles('.bill-photos input[capture="environment"]', { name: "bill.png", mimeType: "image/png", buffer: PIXEL });
+  await page.waitForSelector(".bill-photos .img-thumb img");
+  await page.click("[data-save]");
+  await page.waitForSelector(".bill-photo-card");
+  text = await view();
+  check(text.includes("To fill in") && text.includes("Fill in the details"), `${tag}: purchase bill saved with only the photo`);
+  await page.screenshot({ path: `${OUT}/purchase-photo-${tag}.png`, fullPage: true });
+  await page.goto(BASE + "#/purchases");
+  await page.waitForSelector("tr[data-id]");
+  check((await view()).includes("To fill in"), `${tag}: purchase list shows the bill to fill in`);
+
+  // Notes: write one, open it, send to WhatsApp
+  await page.goto(BASE + "#/notes");
+  await page.waitForSelector(".note-card");
+  check((await view()).includes("Hygiene rules for the farm team"), `${tag}: notes list`);
+  await page.screenshot({ path: `${OUT}/notes-${tag}.png`, fullPage: true });
+  await page.click("[data-new]:visible");
+  await page.fill('.modal [name="title"]', "Route for Monday");
+  await page.selectOption('.modal [name="category"]', "Sales routes");
+  await page.fill('.modal [name="body"]', "Aluva, Kalamassery, Edappally. Driver Suresh 9847012345");
+  await page.click(".modal-foot .btn-primary");
+  await page.waitForSelector('.page-head h1:has-text("Route for Monday")');
+  check(!!(await page.$('.note-body a[href="tel:9847012345"]')), `${tag}: phone number in a note is tappable`);
+  await page.click("[data-wa]");
+  const wa = await page.evaluate(() => window.__opened || "");
+  check(wa.startsWith("https://wa.me/?text=") && decodeURIComponent(wa).includes("*Route for Monday*"), `${tag}: note goes to WhatsApp as text`);
+  await page.screenshot({ path: `${OUT}/note-${tag}.png`, fullPage: true });
+
+  // Activity log
+  await page.goto(BASE + "#/logs");
+  await page.waitForSelector(".log-tbl tbody tr");
+  text = await view();
+  check(text.includes("Signed up") && text.includes("Note") && text.includes("Route for Monday") && text.includes("Expense"), `${tag}: activity log lists today's sign-ups and changes`);
+  await page.screenshot({ path: `${OUT}/logs-${tag}.png`, fullPage: true });
+  await page.selectOption("[data-app]", "site");
+  await page.waitForTimeout(100);
+  const apps = await page.$$eval(".log-tbl tbody tr", (rows) => rows.length);
+  check(apps === 2, `${tag}: website filter shows the 2 website entries (${apps})`);
+
   check(!errors.length, `${tag}: no console errors ${errors.join(" | ")}`);
   await ctx.close();
 }

@@ -78,7 +78,7 @@ export const store = {
     c[out.id] = out;
     if (backend) backend.write(name, out.id, isNew ? { ...out, id: undefined } : patch, isNew);
     persistSoon();
-    emit({ type: "local", collection: name, id: out.id });
+    emit({ type: "local", collection: name, id: out.id, isNew, patch: isNew ? out : patch, before: existing });
     return out;
   },
 
@@ -89,10 +89,11 @@ export const store = {
   remove(name, id) {
     const c = this.col(name);
     if (!c[id]) return;
+    const before = c[id];
     delete c[id];
     if (backend) backend.remove(name, id);
     persistSoon();
-    emit({ type: "local", collection: name, id });
+    emit({ type: "local", collection: name, id, removed: true, before });
   },
 
   // Firestore listener results for one collection: changes = [{ id, data | null }].

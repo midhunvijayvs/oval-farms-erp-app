@@ -45,6 +45,8 @@ await ctx.route("https://www.gstatic.com/firebasejs/**", (r) => {
   r.fulfill({ status: 200, contentType: "text/javascript", body: readFileSync(SDK_DIR + "/" + file) });
 });
 const page = await ctx.newPage();
+// The public IP lookup used by the activity log
+await page.route("https://api.ipify.org/**", (r) => r.fulfill({ contentType: "application/json", body: JSON.stringify({ ip: "203.0.113.7" }) }));
 const errors = [];
 page.on("pageerror", (e) => errors.push(e.message));
 page.on("console", (m) => { if (m.type() === "error" && !/fonts|favicon|ovalfarm\.in|404/.test(m.text())) errors.push(m.text()); });
@@ -183,6 +185,16 @@ check((await page.$eval(".line [data-f=itemId]", (s) => s.options[s.selectedInde
 await page.click("[data-save]");
 await page.waitForSelector(".paper");
 check((await page.textContent(".paper")).includes("320.00"), "pack invoice total matches the order");
+
+// Activity log: the ERP logs sign-in and changes; the website logs as the customer (same shape as
+// ovalfarm.in's src/customer/activityLog.js); the admin sees both on one page.
+await signInWithEmailAndPassword(siteAuth, "meera@example.com", password);
+await addDoc(collection(siteDb, "logs"), { uid: siteAuth.currentUser.uid, email: "meera@example.com", at: serverTimestamp(), app: "site", action: "Placed order", what: "orders", docId: packOrder.id, label: "OF-TEST", fields: [], note: "", name: "Meera", phone: "+919847000222", ip: "", device: "Test" });
+await signOut(siteAuth);
+await page.goto(BASE + "#/logs");
+await waitFor(async () => { await page.click('[data-preset="today"]'); await page.waitForTimeout(600); const t = await page.textContent("#view"); return t.includes("Placed order") && t.includes("Created") && t.includes("203.0.113.7"); });
+const logText = await page.textContent("#view");
+check(logText.includes("Signed in") && logText.includes("Created") && logText.includes("Placed order") && logText.includes("Meera") && logText.includes("203.0.113.7"), "activity log shows ERP sign-in, ERP changes and the website order");
 
 check(!errors.length, `no console errors ${errors.join(" | ")}`);
 await browser.close();

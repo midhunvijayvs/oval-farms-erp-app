@@ -7,8 +7,8 @@ import { store } from "./store.js";
 // investor: like Viewer (looks at everything, changes nothing), but other investors appear only
 // by their investor ID, never by name.
 export const ROLES = {
-  admin:    { label: "Admin",    write: true,  delete: true,  finance: true,  reports: true,  admin: true,  investments: true },
-  manager:  { label: "Manager",  write: true,  delete: true,  finance: true,  reports: true,  admin: false },
+  admin:    { label: "Admin",    write: true,  delete: true,  finance: true,  reports: true,  admin: true,  investments: true, notes: true, logs: true },
+  manager:  { label: "Manager",  write: true,  delete: true,  finance: true,  reports: true,  admin: false, notes: true },
   staff:    { label: "Staff",    write: true,  delete: false, finance: false, reports: false, admin: false },
   viewer:   { label: "Viewer",   write: false, delete: false, finance: true,  reports: true,  admin: false, investments: true },
   investor: { label: "Investor", write: false, delete: false, finance: true,  reports: true,  admin: false, investments: true, investor: true },
