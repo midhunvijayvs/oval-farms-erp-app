@@ -6,6 +6,8 @@ rules_version = '2';
 // Who is who:
 //   - Owners: the business Google account(s) below. Always allowed in as Admin.
 //   - Staff: anyone with a document in staff/{their email} (Settings > Team in the ERP).
+//     The Investor role reads everything like a Viewer, except the team list (only their own
+//     record), so other investors stay anonymous: investments carry only an investor ID.
 //   - Customers: anyone signed in on ovalfarm.in. They see the public catalog, their own
 //     customer record and their own orders, nothing else.
 service cloud.firestore {
@@ -19,7 +21,10 @@ service cloud.firestore {
     function isOwner() { return verified() && myEmail() in ['ovaleggfarm@gmail.com']; }
     function staffPath() { return /databases/$(database)/documents/staff/$(myEmail()); }
     function staffRole() { return get(staffPath()).data.role; }
-    function isStaff() { return isOwner() || (verified() && exists(staffPath())); }
+    function onTeam() { return verified() && exists(staffPath()); }
+    function isStaff() { return isOwner() || onTeam(); }
+    function seesTeam() { return isOwner() || (onTeam() && staffRole() != 'investor'); }
+    function canSeeInvestments() { return isOwner() || (onTeam() && staffRole() in ['admin', 'viewer', 'investor']); }
     function canWrite() { return isOwner() || (isStaff() && staffRole() in ['admin', 'manager', 'staff']); }
     function canDelete() { return isOwner() || (isStaff() && staffRole() in ['admin', 'manager']); }
     function isAdmin() { return isOwner() || (isStaff() && staffRole() == 'admin'); }
@@ -30,13 +35,26 @@ service cloud.firestore {
 
     // ---------- ERP team ----------
     match /staff/{email} {
-      allow read: if isStaff() || (verified() && myEmail() == email);
+      allow read: if seesTeam() || (verified() && myEmail() == email);
       allow create, update: if isAdmin()
-        && request.resource.data.role in ['admin', 'manager', 'staff', 'viewer']
+        && request.resource.data.role in ['admin', 'manager', 'staff', 'viewer', 'investor']
         && request.resource.data.email == email;
       // Everyone keeps their own name, photo and last-seen day up to date.
-      allow update: if isStaff() && myEmail() == email
+      allow update: if onTeam() && myEmail() == email
         && changed().hasOnly(['name', 'picture', 'lastSeen', 'updatedAt', 'updatedBy']);
+      allow delete: if isAdmin();
+    }
+
+    // ---------- Investments ----------
+    // Admins record them; Admins, Viewers and Investors see them all. An investment names its
+    // investor only by ID (OFI-001…), never by name or email; the ID→person link is in the team
+    // list, which investors cannot read.
+    match /investments/{id} {
+      allow read: if canSeeInvestments();
+      allow create, update: if isAdmin()
+        && request.resource.data.investorNo is string && request.resource.data.investorNo.size() > 0
+        && !request.resource.data.keys().hasAny(['investorEmail', 'investorName', 'email', 'name', 'phone', 'address'])
+        && request.resource.data.amount is number && request.resource.data.amount > 0;
       allow delete: if isAdmin();
     }
 

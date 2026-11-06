@@ -150,6 +150,17 @@ export function seedDemo() {
   order("DEMO5M8PQB", 5, "rahul", { channel: "online", source: "Website", status: "confirmed", items: [["oyster", 2], ["soup", 1]] });
   order("DEMO3H6TWC", 26, "hotel", { channel: "offline", source: "WhatsApp", status: "confirmed", payment: "credit", items: [["milky", 6], ["oyster", 8]] });
 
+  // Investors (team members with the Investor role) and what they put in
+  const investorsDemo = [["ravi.investor@example.com", "Ravi Menon", "OFI-001"], ["latha.investor@example.com", "Latha Nair", "OFI-002"]];
+  for (const [email, name, investorNo] of investorsDemo) put("staff", { id: email, email, name, role: "investor", investorNo });
+  // An investment names its investor only by ID
+  for (const [investorNo, days, amount, mode, receivedIn, reference] of [
+    ["OFI-001", -200, 200000, "Bank Transfer", "SBI current a/c ••0123", "UTR 4512"],
+    ["OFI-002", -150, 100000, "Cheque", "SBI current a/c ••0123", "Chq 000231"],
+    ["OFI-001", -60, 50000, "Cash", "Midhun", ""],
+    ["OFI-002", -20, 75000, "UPI", "SBI current a/c ••0123", "UPI 88123"],
+  ]) put("investments", { investorNo, date: d(days), amount, mode, receivedIn, reference, notes: "" });
+
   for (const [title, due, pr, who, rep] of [["Mist fruiting rooms (morning & evening)", d(0), "High", "Ramesh K", "Daily"], ["Pasteurise straw for the next batch", d(1), "Normal", "Ramesh K", "No"], ["Collect payment from Hotel Green Leaf", d(-1), "High", "Anil Kumar", "No"], ["Renew FSSAI licence", d(20), "Normal", "", "No"]]) {
     put("tasks", { title, dueDate: due, priority: pr, assignee: who, status: "Open", repeat: rep });
   }

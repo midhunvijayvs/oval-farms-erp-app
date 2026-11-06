@@ -127,6 +127,49 @@ await t("customers cannot read ERP records", assertFails(getDocs(collection(caro
 await t("staff cannot change business settings", assertFails(setDoc(doc(worker, "settings/business"), { name: "X" })));
 await t("manager changes business settings", assertSucceeds(setDoc(doc(manager, "settings/business"), { name: "Oval Farms" })));
 await t("staff read settings", assertSucceeds(getDoc(doc(worker, "settings/business"))));
+// Investments: admins record; viewers and investors read all. An investor reads the whole ERP
+// like a viewer, but not the team list, and investments carry only the investor ID.
+const ravi = env.authenticatedContext("ravi", { email: "ravi@gmail.com", email_verified: true }).firestore();
+const latha = env.authenticatedContext("latha", { email: "latha@gmail.com", email_verified: true }).firestore();
+await t("admin adds an investor", setDoc(doc(owner, "staff/ravi@gmail.com"), { email: "ravi@gmail.com", name: "Ravi", role: "investor", investorNo: "OFI-001" }));
+await t("admin adds a second investor", setDoc(doc(owner, "staff/latha@gmail.com"), { email: "latha@gmail.com", name: "Latha", role: "investor", investorNo: "OFI-002" }));
+await t("admin records an investment", assertSucceeds(setDoc(doc(owner, "investments/i1"), { investorNo: "OFI-001", amount: 50000, date: "2026-11-01", mode: "UPI", ...ts })));
+await t("admin records another", assertSucceeds(setDoc(doc(owner, "investments/i2"), { investorNo: "OFI-002", amount: 20000, date: "2026-11-02", mode: "Cash", ...ts })));
+await t("investment needs a positive amount", assertFails(setDoc(doc(owner, "investments/i3"), { investorNo: "OFI-001", amount: 0 })));
+await t("investment needs an investor ID", assertFails(setDoc(doc(owner, "investments/i3"), { amount: 10 })));
+await t("investment cannot carry the investor's email", assertFails(setDoc(doc(owner, "investments/i3"), { investorNo: "OFI-001", investorEmail: "ravi@gmail.com", amount: 10 })));
+await t("investment cannot carry the investor's name", assertFails(setDoc(doc(owner, "investments/i3"), { investorNo: "OFI-001", investorName: "Ravi", amount: 10 })));
+await t("manager cannot record investments", assertFails(setDoc(doc(manager, "investments/i4"), { investorNo: "OFI-001", amount: 10 })));
+await t("manager cannot read investments", assertFails(getDocs(collection(manager, "investments"))));
+await t("staff cannot read investments", assertFails(getDocs(collection(worker, "investments"))));
+await t("viewer reads all investments", assertSucceeds(getDocs(collection(viewer, "investments"))));
+await t("viewer cannot change investments", assertFails(updateDoc(doc(viewer, "investments/i1"), { amount: 1 })));
+await t("investor reads every investment", assertSucceeds(getDocs(collection(ravi, "investments"))));
+await t("investor reads another investor's investment", assertSucceeds(getDoc(doc(ravi, "investments/i2"))));
+await t("investor cannot change an investment", assertFails(updateDoc(doc(ravi, "investments/i1"), { amount: 99999999 })));
+await t("investor cannot add an investment", assertFails(setDoc(doc(ravi, "investments/i5"), { investorNo: "OFI-001", amount: 10 })));
+await t("investor cannot delete an investment", assertFails(deleteDoc(doc(ravi, "investments/i2"))));
+await t("investor reads their own team record", assertSucceeds(getDoc(doc(ravi, "staff/ravi@gmail.com"))));
+await t("investor keeps their own name and photo current", assertSucceeds(updateDoc(doc(ravi, "staff/ravi@gmail.com"), { name: "Ravi M", lastSeen: "2026-11-06", updatedAt: serverTimestamp(), updatedBy: "ravi@gmail.com" })));
+await t("investor cannot make themselves admin", assertFails(updateDoc(doc(ravi, "staff/ravi@gmail.com"), { role: "admin" })));
+await t("investor cannot change their investor ID", assertFails(updateDoc(doc(ravi, "staff/ravi@gmail.com"), { investorNo: "OFI-002" })));
+await t("investor cannot read the team list", assertFails(getDocs(collection(ravi, "staff"))));
+await t("investor cannot read another investor's team record", assertFails(getDoc(doc(ravi, "staff/latha@gmail.com"))));
+await t("viewer reads the team list", assertSucceeds(getDocs(collection(viewer, "staff"))));
+await t("investor reads orders", assertSucceeds(getDocs(collection(ravi, "orders"))));
+await t("investor reads products", assertSucceeds(getDocs(collection(ravi, "products"))));
+await t("investor reads invoices", assertSucceeds(getDocs(collection(ravi, "sales"))));
+await t("investor reads expenses", assertSucceeds(getDocs(collection(ravi, "expenses"))));
+await t("investor reads customers", assertSucceeds(getDocs(collection(ravi, "customers"))));
+await t("investor reads settings", assertSucceeds(getDoc(doc(ravi, "settings/business"))));
+await t("investor cannot write ERP records", assertFails(setDoc(doc(ravi, "expenses/e1"), { amount: 1 })));
+await t("investor cannot add orders", assertFails(setDoc(doc(ravi, "orders/o-inv"), { status: "confirmed" })));
+await t("investor cannot change products", assertFails(setDoc(doc(ravi, "products/p-inv"), { name: "X" })));
+await t("investor cannot delete invoices", assertFails(deleteDoc(doc(ravi, "sales/s9"))));
+await t("investor cannot change settings", assertFails(setDoc(doc(ravi, "settings/business"), { name: "X" })));
+await t("investor cannot add team members", assertFails(setDoc(doc(ravi, "staff/x@gmail.com"), { email: "x@gmail.com", role: "admin" })));
+await t("admin deletes an investment", assertSucceeds(deleteDoc(doc(owner, "investments/i2"))));
+
 await t("other collections closed", assertFails(getDoc(doc(owner, "secrets/x"))));
 
 await env.cleanup();

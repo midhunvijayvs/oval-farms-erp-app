@@ -269,6 +269,29 @@ for (const vp of [{ width: 1280, height: 860 }, { width: 390, height: 844 }]) {
   await page.click("[data-save]");
   await page.waitForSelector('a[href^="#/sales/new?order="]');
 
+  // Investments: list by investor, record one, investor history
+  await page.goto(BASE + "#/investments");
+  await page.waitForSelector("tr[data-inv]");
+  text = await view();
+  check(text.includes("Ravi Menon") && text.includes("₹2,50,000.00") && text.includes("₹4,25,000.00"), `${tag}: investments by investor with totals`);
+  await page.screenshot({ path: `${OUT}/investments-${tag}.png`, fullPage: true });
+  await page.click("[data-new]:visible");
+  await page.waitForSelector("[data-investor]");
+  await pick("[data-investor]", "latha", "Latha Nair");
+  await page.fill('.modal [name="amount"]', "25000");
+  await page.selectOption('.modal [name="mode"]', "Cash");
+  check((await page.textContent(".modal [data-recv-label]")).includes("Received by"), `${tag}: cash asks who received it`);
+  await page.fill('.modal [name="receivedIn"]', "Midhun");
+  await page.screenshot({ path: `${OUT}/investment-form-${tag}.png` });
+  await page.click(".modal-foot .btn-primary");
+  await page.waitForTimeout(300);
+  check((await view()).includes("₹4,50,000.00"), `${tag}: new investment adds to the total`);
+  await page.click('tr[data-inv="OFI-002"]');
+  await page.waitForSelector('.page-head h1:has-text("Latha Nair")');
+  text = await view();
+  check(text.includes("Latha Nair") && text.includes("OFI-002") && text.includes("₹2,00,000.00") && (await page.$$("tr[data-edit]")).length === 3, `${tag}: investor history with 3 investments and total`);
+  await page.screenshot({ path: `${OUT}/investor-${tag}.png`, fullPage: true });
+
   // Stock shows what's on order
   await page.goto(BASE + "#/stock");
   await page.waitForSelector("tr[data-id]");

@@ -34,7 +34,7 @@ export function bindCombo(wrap, { options, onPick, thumbs = false, empty = "No m
   const input = wrap.querySelector(".combo-input");
   const box = wrap.querySelector(".combo-list");
   const all = () => (typeof options === "function" ? options() : options);
-  const original = input.value;
+  let original = input.value;
   let shown = [], active = 0;
 
   const draw = () => {
@@ -46,7 +46,7 @@ export function bindCombo(wrap, { options, onPick, thumbs = false, empty = "No m
   };
   const open = () => { draw(); box.hidden = false; input.setAttribute("aria-expanded", "true"); };
   const close = () => { box.hidden = true; input.setAttribute("aria-expanded", "false"); };
-  const pick = (o) => { close(); input.value = o.label; onPick(o); };
+  const pick = (o) => { close(); input.value = original = o.label; onPick(o); };
   const moveTo = (i) => {
     active = Math.max(0, Math.min(shown.length - 1, i));
     box.querySelectorAll(".combo-opt").forEach((el, j) => el.classList.toggle("on", j === active));
