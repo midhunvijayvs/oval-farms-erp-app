@@ -17,13 +17,16 @@ import { stockView } from "./views/stock.js";
 import { attendanceView } from "./views/attendance.js";
 import { reportsView } from "./views/reports.js";
 import { settingsView, applyTheme } from "./views/settings.js";
-import { seedDemo } from "./seed.js";
+import { seedDemo, demoLogEntries } from "./seed.js";
 import { seedWebsiteProducts } from "./seed-products.js";
 import { seedDeliveryZones } from "./delivery.js";
 import { deliveryView } from "./views/delivery.js";
 import { investmentsView, investorView, myInvestmentsView } from "./views/investments.js";
+import { notesView, noteView } from "./views/notes.js";
+import { logsView } from "./views/logs.js";
+import { logActivity, logWrite, logDelete, seedDemoLog, withoutLog } from "./activity.js";
 
-window.OVAL_VERSION = "2.2.0";
+window.OVAL_VERSION = "2.3.0";
 const cfg = window.OVAL_CONFIG || {};
 const LS = {
   get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },
@@ -69,7 +72,11 @@ const NAV = [
     { href: "#/employees", label: "Employees", ic: "id" },
     { href: "#/tasks", label: "Tasks", ic: "check" },
   ] },
-  { section: "Insights", perm: "reports", items: [{ href: "#/reports", label: "Reports", ic: "chart" }] },
+  { section: "Insights", items: [
+    { href: "#/reports", label: "Reports", ic: "chart", perm: "reports" },
+    { href: "#/notes", label: "Notes", ic: "note", perm: "notes" },
+    { href: "#/logs", label: "Activity log", ic: "log", perm: "logs" },
+  ] },
   { items: [{ href: "#/settings", label: "Settings", ic: "settings" }] },
 ];
 const BOTTOM = [
@@ -78,6 +85,13 @@ const BOTTOM = [
   { href: "#/sales", label: "Invoices", ic: "file" },
   { href: "#/stock", label: "Stock", ic: "layers" },
 ];
+
+// Every change made here goes to the activity log (looking at data doesn't).
+store.on((meta) => {
+  if (!meta || meta.type !== "local" || !session.user || !meta.collection) return;
+  if (meta.removed) logDelete(meta.collection, meta.id, meta.before);
+  else logWrite(meta.collection, meta.id, meta.patch, meta.isNew, meta.before);
+});
 
 function setupRoutes() {
   const fin = () => can("finance");
@@ -123,6 +137,9 @@ function setupRoutes() {
   route("/investments", investmentsView, { allow: () => can("investments") });
   route("/investments/investor/:id", investorView, { allow: () => can("investments") });
   route("/my-investments", myInvestmentsView, { allow: () => isInvestor() });
+  route("/notes", notesView, { allow: () => can("notes") });
+  route("/notes/:id", noteView, { allow: () => can("notes") });
+  route("/logs", logsView, { allow: () => can("logs") });
 }
 
 // ---------------- screens ----------------
@@ -172,13 +189,13 @@ async function signIn(hint) {
     await firebase.init();
     const token = cfg.FIREBASE_EMULATORS ? (cfg.FIREBASE_EMULATORS.signInAs || prompt("Test email")) : await googleToken(hint);
     const user = await firebase.signInWithGoogleToken(token);
-    await afterSignIn(user);
+    await afterSignIn(user, { fresh: true });
   } catch (e) {
     showLogin(e.message === "Superseded" ? "" : e.message);
   }
 }
 
-async function afterSignIn(user) {
+async function afterSignIn(user, { fresh = false } = {}) {
   session.user = { email: userKey(user.email), name: user.displayName || user.email, picture: user.photoURL || "" };
   session.mode = "firebase";
   LS.set("ovalerp_hint", session.user.email);
@@ -187,8 +204,9 @@ async function afterSignIn(user) {
   let me;
   try { me = await firebase.staffRecord(session.user.email); }
   catch (e) { return showLogin("Couldn't reach the database: " + e.message); }
-  if (!me) return showNoAccess();
+  if (!me) { logActivity("Sign-in refused", { note: "Not on the team" }); return showNoAccess(); }
   session.role = me.role;
+  if (fresh) logActivity("Signed in");
   await store.open("firebase", session.user, firebase.backend);
   await firebase.startSync({ investorEmail: me.role === "investor" ? userKey(session.user.email) : "" });
   touchStaff();
@@ -223,11 +241,13 @@ async function enterDemo() {
   session.user = { email: "demo@ovalfarms.local", name: "Demo User", picture: "" };
   LS.set("ovalerp_mode", "demo");
   await store.open("demo", session.user);
-  if (!store.all("products").length) seedDemo();
+  if (!store.all("products").length) withoutLog(seedDemo);
+  seedDemoLog(demoLogEntries());
   mountShell();
 }
 
 async function signOut() {
+  if (session.mode === "firebase") await Promise.race([logActivity("Signed out"), sleep(1500)]);
   await store.flush();
   if (session.mode === "firebase") await firebase.signOut();
   LS.del("ovalerp_mode");

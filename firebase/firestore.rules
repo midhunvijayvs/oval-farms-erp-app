@@ -58,6 +58,27 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // ---------- Notes ----------
+    // Business notes: Admins and Managers only. Nobody else can even read them.
+    match /notes/{id} {
+      allow read, create, update, delete: if canDelete();
+    }
+
+    // ---------- Activity log ----------
+    // Anyone signed in (ERP or ovalfarm.in) adds entries about themselves only, stamped with the
+    // server's time. Only Admins read them. Nobody can change or delete an entry.
+    match /logs/{id} {
+      allow read: if isAdmin();
+      allow create: if signedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.get('email', '').lower()
+        && request.resource.data.at == request.time
+        && request.resource.data.app in ['erp', 'site']
+        && request.resource.data.action is string && request.resource.data.action.size() <= 60
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'at', 'app', 'action', 'what', 'docId', 'label', 'fields', 'note', 'name', 'phone', 'role', 'ip', 'device']);
+      allow update, delete: if false;
+    }
+
     // ---------- Products ----------
     // The full product list (cost prices, notes, materials) is for staff only.
     match /products/{id} {

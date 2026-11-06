@@ -8,6 +8,7 @@
 import { store } from "./store.js";
 import { session, can } from "./session.js";
 import { catalogChanges } from "./catalog.js";
+import { setLogWriter } from "./activity.js";
 
 const SDK = "https://www.gstatic.com/firebasejs/12.19.0/";
 const cfg = window.OVAL_CONFIG || {};
@@ -17,7 +18,10 @@ export const COLLECTIONS = [
   "settings", "staff", "products", "catalog", "customers", "customerInvites", "orders",
   "batches", "harvests", "productions", "adjustments", "sales", "purchases", "suppliers",
   "expenses", "payments", "employees", "attendance", "tasks", "delivery", "productGroups", "investments",
+  "notes",
 ];
+// Collections only some roles may read: no listener for the others.
+const NEEDS = { notes: "notes", investments: "investments" };
 const TIME_FIELDS = new Set(["createdAt", "updatedAt"]);
 
 // status: idle | saving | offline | error
@@ -59,6 +63,12 @@ export async function init() {
     db = s.initializeFirestore(app, settings);
   }
   storage = s.getStorage(app);
+  setLogWriter((entry) => {
+    const u = auth.currentUser;
+    if (!u) return;
+    return s.addDoc(s.collection(db, "logs"), { ...entry, uid: u.uid, email: (u.email || "").toLowerCase(), at: s.serverTimestamp() })
+      .catch((e) => console.warn("Activity log entry not saved", e));
+  });
   // Local testing against the Firebase emulators (tests/). Never set in production.
   const em = cfg.FIREBASE_EMULATORS;
   if (em) {
@@ -153,7 +163,7 @@ export const backend = {
 // record, so other investors' names stay hidden.
 export function startSync({ investorEmail = "" } = {}) {
   stopSync();
-  const sources = COLLECTIONS.map((name) => ({ name, ref: investorEmail && name === "staff" ? sdk.doc(db, "staff", investorEmail) : sdk.collection(db, name) }));
+  const sources = COLLECTIONS.filter((name) => !NEEDS[name] || can(NEEDS[name])).map((name) => ({ name, ref: investorEmail && name === "staff" ? sdk.doc(db, "staff", investorEmail) : sdk.collection(db, name) }));
   let waiting = sources.length;
   const ready = new Promise((resolve) => {
     const done = () => { if (--waiting === 0) resolve(); };
@@ -261,16 +271,26 @@ function shrink(file, max = 1400) {
   });
 }
 
-// Resolves with the picture's public web address.
-export async function uploadProductImage(file, productId) {
-  const blob = await shrink(file);
+// Resolves with the picture's web address. folder: "products/<id>" or "bills/<collection>".
+export async function uploadImage(file, folder) {
+  const bill = folder.startsWith("bills/");
+  const blob = await shrink(file, bill ? 2000 : 1400);
   if (session.mode === "demo") return await new Promise((r) => { const fr = new FileReader(); fr.onload = () => r(fr.result); fr.readAsDataURL(blob); });
-  const ref = sdk.ref(storage, `products/${productId}/${Date.now()}.jpg`);
+  const ref = sdk.ref(storage, `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 7)}.jpg`);
   try {
-    await sdk.uploadBytes(ref, blob, { contentType: "image/jpeg", cacheControl: "public, max-age=31536000" });
+    await sdk.uploadBytes(ref, blob, { contentType: "image/jpeg", cacheControl: (bill ? "private" : "public") + ", max-age=31536000" });
   } catch (e) {
     if (/storage\/(unknown|unauthorized|bucket-not-found|project-not-found)/.test(e.code || "")) throw new Error("Photo storage isn't switched on yet (Firebase console > Storage). You can paste a picture link instead.");
     throw e;
   }
   return await sdk.getDownloadURL(ref);
+}
+
+// Activity log entries between two days (YYYY-MM-DD, both included), newest first. Admins only.
+export async function queryLogs(fromDay, toDay, max = 3000) {
+  const start = new Date(fromDay + "T00:00:00");
+  const end = new Date(toDay + "T00:00:00"); end.setDate(end.getDate() + 1);
+  const q = sdk.query(sdk.collection(db, "logs"), sdk.where("at", ">=", sdk.Timestamp.fromDate(start)), sdk.where("at", "<", sdk.Timestamp.fromDate(end)), sdk.orderBy("at", "desc"), sdk.limit(max));
+  const snap = await sdk.getDocs(q);
+  return snap.docs.map((d) => ({ ...toPlain(d.data()), id: d.id }));
 }

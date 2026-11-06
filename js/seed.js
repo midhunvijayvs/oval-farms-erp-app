@@ -161,6 +161,14 @@ export function seedDemo() {
     ["OFI-002", -20, 75000, "UPI", "SBI current a/c ••0123", "UPI 88123"],
   ]) put("investments", { investorNo, date: d(days), amount, mode, receivedIn, reference, notes: "" });
 
+  // Notes (Admins and Managers)
+  for (const [title, category, pinned, body] of [
+    ["Hygiene rules for the farm team", "Farm instructions", true, "1. Wash hands and feet before entering the growing rooms.\n2. Wear the clean apron and cap kept at the door.\n3. No outside footwear inside.\n4. Remove any bag with green or black mould at once and tell the supervisor.\n5. Clean harvest knives with alcohol after every room."],
+    ["Mushroom pickle (10 jars)", "Recipes", false, "Oyster mushroom 2.2 kg, gingelly oil 600 ml, garlic 200 g, ginger 150 g, chilli powder 120 g, vinegar 250 ml, salt to taste.\nBlanch, drain well, fry in oil, add masala, cool and fill 200 g jars."],
+    ["Taxi and transport contacts", "Contacts", false, "Suresh (taxi, Kochi city) 9847012345\nBabu (pick-up van, Aluva) 9446055667\nTempo for straw loads: Anil 9020011223"],
+    ["Resale trial, October", "Research", false, "Bought 40 kg button mushroom at ₹160/kg = ₹6,400.\nPacking and transport ₹900. Total cost ₹7,300.\nSold 37 kg at ₹230/kg = ₹8,510.\nProfit ₹1,210 (16.6%). 3 kg wasted."],
+  ]) put("notes", { title, category, pinned, body });
+
   for (const [title, due, pr, who, rep] of [["Mist fruiting rooms (morning & evening)", d(0), "High", "Ramesh K", "Daily"], ["Pasteurise straw for the next batch", d(1), "Normal", "Ramesh K", "No"], ["Collect payment from Hotel Green Leaf", d(-1), "High", "Anil Kumar", "No"], ["Renew FSSAI licence", d(20), "Normal", "", "No"]]) {
     put("tasks", { title, dueDate: due, priority: pr, assignee: who, status: "Open", repeat: rep });
   }
@@ -170,4 +178,17 @@ function totals(doc) {
   let sub = 0, tax = 0;
   for (const l of doc.lines) { const t = l.qty * l.rate; sub += t; tax += (t * Number(l.gstRate || 0)) / 100; }
   return { total: Math.round(sub + tax) };
+}
+
+// A few activity log entries so the demo log isn't empty.
+export function demoLogEntries() {
+  const at = (minsAgo) => new Date(Date.now() - minsAgo * 60000).toISOString();
+  const base = { ip: "103.21.58.14", device: "Chrome on Android" };
+  return [
+    { ...base, id: "l1", at: at(5), app: "erp", action: "Changed", what: "orders", label: "Fresh Mart", fields: ["status"], name: "Demo User", email: "demo@ovalfarms.local", role: "admin", uid: "demo" },
+    { ...base, id: "l2", at: at(18), app: "site", action: "Placed order", what: "orders", label: "OF-7Q2KXA", name: "Anjali R", email: "anjali@example.com", phone: "+919847000111", uid: "site-anjali", ip: "49.37.200.5", device: "Safari on iPhone/iPad" },
+    { ...base, id: "l3", at: at(25), app: "site", action: "Signed up", what: "account", label: "Email and password", name: "Anjali R", email: "anjali@example.com", phone: "", uid: "site-anjali", ip: "49.37.200.5", device: "Safari on iPhone/iPad" },
+    { ...base, id: "l4", at: at(42), app: "erp", action: "Created", what: "expenses", label: "Telephone & Internet", name: "Demo User", email: "demo@ovalfarms.local", role: "admin", uid: "demo" },
+    { ...base, id: "l5", at: at(60), app: "erp", action: "Signed in", name: "Demo User", email: "demo@ovalfarms.local", role: "admin", uid: "demo", device: "Chrome on Windows", ip: "117.211.4.90" },
+  ];
 }

@@ -14,6 +14,7 @@ const LIST_LABELS = {
   rooms: "Rooms / sheds", customerTypes: "Customer types", expenseCategories: "Expense categories",
   paymentModes: "Payment modes", adjustmentReasons: "Stock adjustment reasons", employeeRoles: "Employee roles",
   websiteCategories: "Website categories (ovalfarm.in shop)", orderSources: "How orders come in",
+  noteCategories: "Note categories",
 };
 const BIZ = [
   { k: "name", l: "Business name", ph: "Oval Farms" },
@@ -65,10 +66,10 @@ function tabTeam() {
     </tbody></table></div></div>
     <div class="card"><h3>What each role can do</h3>
       <ul class="role-list">
-        <li><b>Admin</b> · everything, including the team list and investments.</li>
-        <li><b>Manager</b> · everything except the team list and investments.</li>
+        <li><b>Admin</b> · everything, including the team list, investments, notes and the activity log.</li>
+        <li><b>Manager</b> · everything, including notes, except the team list, investments and the activity log.</li>
         <li><b>Staff</b> · production, harvests, stock, orders, sales and attendance. Cannot see expenses, payments list or reports, and cannot delete.</li>
-        <li><b>Viewer</b> · can look at everything, including investments, cannot change anything.</li>
+        <li><b>Viewer</b> · can look at everything except notes and the activity log, including investments, cannot change anything.</li>
         <li><b>Investor</b> · like Viewer: can look at everything, cannot change anything. In Investments, other investors show only by their investor ID, never by name.</li>
       </ul>
       <p class="muted small">The database's security rules enforce these roles too.</p>

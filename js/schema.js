@@ -1,7 +1,7 @@
 // Collection definitions. The generic list/form views (views/crud.js) are driven entirely by
 // these, so adding a field or a whole new master list is usually a change here only.
 import { store } from "./store.js";
-import { today } from "./util.js";
+import { today, esc } from "./util.js";
 
 const hasPacks = (r) => Array.isArray(r.packs) && r.packs.length > 0;
 
@@ -19,6 +19,7 @@ export const DEFAULT_LISTS = {
   employeeRoles: ["Farm Worker", "Production", "Packing", "Sales", "Delivery", "Supervisor", "Accounts", "Manager"],
   websiteCategories: ["Fresh mushrooms", "Dried & powders", "Ready to cook", "Grow your own"],
   orderSources: ["Phone call", "WhatsApp", "Walk-in", "Email", "Other"],
+  noteCategories: ["Recipes", "Farm instructions", "Growing steps", "Contacts", "Research", "Sales routes", "Other"],
 };
 
 export function list(name) {
@@ -216,7 +217,11 @@ export const schemas = {
 
   expenses: {
     title: "Expenses", singular: "Expense", icon: "receipt",
+    // With a bill photo the expense can be saved straight away and filled in later.
+    photoField: "billPhotos",
+    needsDetails: (r) => !(Number(r.amount) > 0) || !r.category,
     fields: [
+      { k: "billPhotos", label: "Photo of the bill", type: "images", camera: true, folder: "bills/expenses", hint: "Busy? Just take the photo and save. Fill in the rest later." },
       { k: "date", label: "Date", type: "date", half: true, default: today, required: true },
       { k: "category", label: "Category", type: "select", list: "expenseCategories", half: true, required: true },
       { k: "amount", label: "Amount", type: "money", half: true, required: true },
@@ -226,7 +231,7 @@ export const schemas = {
     ],
     columns: [
       { k: "date", label: "Date", type: "date", primary: true },
-      { k: "category", label: "Category" },
+      { k: "category", label: "Category", html: (v, r) => (schemas.expenses.needsDetails(r) ? '<span class="chip chip-warn">To fill in</span> ' : "") + esc(v || "") + (Array.isArray(r.billPhotos) && r.billPhotos.length ? ' <span class="muted" title="Bill photo attached">📷</span>' : "") },
       { k: "payee", label: "Paid to" },
       { k: "mode", label: "Mode" },
       { k: "amount", label: "Amount", type: "money", align: "right" },

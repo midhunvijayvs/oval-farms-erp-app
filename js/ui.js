@@ -119,14 +119,18 @@ export function fieldHtml(f, value, rec = {}) {
       break;
     case "images": {
       const urls = Array.isArray(value) ? value : [];
-      input = `<div class="img-field" data-images="${f.k}">
+      // f.camera: a bill photo field. Opens the phone camera, no "main photo", photos open full size.
+      const thumbs = urls.map((u, i) => `<figure class="img-thumb">${f.camera ? `<a href="${esc(u)}" target="_blank" rel="noopener" title="Open full size">` : ""}<img src="${esc(u)}" alt="" loading="lazy">${f.camera ? "</a>" : ""}<button type="button" class="icon-btn" data-img-del="${i}" aria-label="Remove photo">${icon("x")}</button>${f.camera ? "" : i ? `<button type="button" class="img-main" data-img-first="${i}">Make main</button>` : `<span class="img-main on">Main</span>`}</figure>`).join("");
+      input = `<div class="img-field ${f.camera ? "bill-photos" : ""}" data-images="${f.k}">
         <input type="hidden" name="${f.k}" value="${esc(JSON.stringify(urls))}">
-        <div class="img-list">${urls.map((u, i) => `<figure class="img-thumb"><img src="${esc(u)}" alt="" loading="lazy"><button type="button" class="icon-btn" data-img-del="${i}" aria-label="Remove photo">${icon("x")}</button>${i ? `<button type="button" class="img-main" data-img-first="${i}">Make main</button>` : `<span class="img-main on">Main</span>`}</figure>`).join("")}</div>
+        <div class="img-list">${thumbs}</div>
         <div class="img-actions">
-          <label class="btn btn-ghost">${icon("upload")}Upload photo<input type="file" accept="image/*" multiple hidden data-img-file></label>
-          <button type="button" class="btn btn-link" data-img-url>Paste a picture link</button>
+          ${f.camera ? `<label class="btn btn-ghost">${icon("camera")}Photograph the bill<input type="file" accept="image/*" capture="environment" hidden data-img-file></label>
+          <label class="btn btn-link">Choose a saved photo<input type="file" accept="image/*" multiple hidden data-img-file></label>`
+          : `<label class="btn btn-ghost">${icon("upload")}Upload photo<input type="file" accept="image/*" multiple hidden data-img-file></label>
+          <button type="button" class="btn btn-link" data-img-url>Paste a picture link</button>`}
         </div>
-        <small class="muted" data-img-msg></small>
+        <small class="muted" data-img-msg>${f.camera && f.hint ? esc(f.hint) : ""}</small>
       </div>`;
       break;
     }
@@ -238,6 +242,7 @@ export function chip(text, tone) {
 
 export function cellValue(col, r) {
   let v = r[col.k];
+  if (col.html) return col.html(v, r);
   if (col.fmt) return esc(col.fmt(v, r));
   if (col.type === "money") return money(v);
   if (col.type === "date") return esc(fmtDate(v));
