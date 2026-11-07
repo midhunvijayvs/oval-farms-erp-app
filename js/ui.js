@@ -229,7 +229,7 @@ const STATUS_TONE = {
   Paid: "ok", Delivered: "ok", Completed: "ok", Received: "ok", Done: "ok", Active: "ok", "In stock": "ok", Present: "ok",
   Confirmed: "info", Ordered: "info", Fruiting: "info", Harvesting: "ok", Incubation: "info", Spawning: "info", Open: "info", Normal: "info",
   "Partly paid": "warn", Low: "warn", Draft: "muted", "Half day": "warn", Leave: "muted", High: "danger",
-  Unpaid: "danger", Cancelled: "muted", "Out of stock": "danger", "Contaminated / Discarded": "danger", Left: "muted", Absent: "danger",
+  Unpaid: "danger", Cancelled: "muted", "Out of stock": "danger", "Contaminated / Discarded": "danger", "Discarded (expired)": "muted", Left: "muted", Absent: "danger",
   Received_: "ok", "Paid out": "warn",
   "On website": "ok", "Low stock": "warn", "Not listed": "muted", Online: "info", Offline: "muted",
   Invited: "warn", Registered: "ok", "No login": "muted",

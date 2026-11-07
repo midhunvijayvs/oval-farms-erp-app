@@ -45,6 +45,20 @@ export function movements() {
     for (const i of store.all("products")) {
       if (Number(i.openingStock)) out.push({ date: i.createdAt ? i.createdAt.slice(0, 10) : "", itemId: i.id, qty: Number(i.openingStock), type: "Opening stock", ref: "" });
     }
+    // Grow batches: materials used go out, the beds made come in; contaminated and expired
+    // beds go out again on the day they're recorded.
+    for (const b of batches.values()) {
+      const link = "#/batches/" + b.id;
+      for (const inp of b.inputs || []) {
+        if (inp.itemId) out.push({ date: b.startDate, itemId: inp.itemId, qty: -(Number(inp.qty) || 0), type: "Used in grow batch", ref: b.code, link });
+      }
+      if (!b.bedItemId) continue;
+      if (Number(b.bags)) out.push({ date: b.startDate, itemId: b.bedItemId, qty: Number(b.bags), type: "Grow batch", ref: b.code, link });
+      for (const c of b.contaminations || []) {
+        if (Number(c.qty)) out.push({ date: c.date, itemId: b.bedItemId, qty: -Number(c.qty), type: "Contaminated", ref: b.code, link });
+      }
+      if (b.discarded && Number(b.discarded.qty)) out.push({ date: b.discarded.date, itemId: b.bedItemId, qty: -Number(b.discarded.qty), type: "Discarded by expiry", ref: b.code, link });
+    }
     for (const h of store.all("harvests")) {
       const b = batches.get(h.batchId);
       if (!b || !b.outputItemId) continue;
@@ -167,6 +181,21 @@ export function totalReceivables() {
 
 export function totalPayables() {
   return round2(sum(store.all("suppliers"), (s) => Math.max(0, supplierBalance(s.id))));
+}
+
+// Beds of a batch still in the grow room: made, less contaminated and discarded.
+export function contaminatedBeds(b) { return sum(b.contaminations || [], (c) => Number(c.qty) || 0); }
+export function bedsLeft(b) {
+  return Math.max(0, round3((Number(b.bags) || 0) - contaminatedBeds(b) - (b.discarded ? Number(b.discarded.qty) || 0 : 0)));
+}
+
+// Cost of what went into a batch, at the materials' cost prices. A typed batch cost wins.
+export function batchMaterialCost(b) {
+  const items = new Map(store.all("products").map((i) => [i.id, i]));
+  return round2(sum(b.inputs || [], (inp) => (Number(inp.qty) || 0) * (Number((items.get(inp.itemId) || {}).costPrice) || 0)));
+}
+export function batchCost(b) {
+  return b.cost !== "" && b.cost != null && !isNaN(Number(b.cost)) ? round2(Number(b.cost)) : batchMaterialCost(b);
 }
 
 export function productionCost(run) {
