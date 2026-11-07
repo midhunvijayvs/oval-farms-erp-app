@@ -679,3 +679,13 @@ body.modal-open { overflow: hidden; }
   .log-toolbar .date-range { flex: 1 1 40%; }
   .log-toolbar .date-range input { flex: 1; min-width: 0; }
 }
+
+/* Investments: Edit / Delete on each row (Admins) */
+.btn-sm { padding: 5px 10px; font-size: 13px; gap: 5px; }
+.btn-sm .ic, .btn-sm svg { width: 15px; height: 15px; }
+.inv-acts { white-space: nowrap; width: 1%; }
+.inv-acts .btn + .btn { margin-left: 6px; }
+@media (max-width: 860px) {
+  .tbl td.inv-acts { padding-top: 8px; text-align: left; }
+  .tbl td.inv-acts::before { display: none; }
+}

@@ -26,7 +26,7 @@ import { notesView, noteView } from "./views/notes.js";
 import { logsView } from "./views/logs.js";
 import { logActivity, logWrite, logDelete, seedDemoLog, withoutLog } from "./activity.js";
 
-window.OVAL_VERSION = "2.3.0";
+window.OVAL_VERSION = "2.3.1";
 const cfg = window.OVAL_CONFIG || {};
 const LS = {
   get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },

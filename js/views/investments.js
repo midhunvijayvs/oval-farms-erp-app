@@ -109,7 +109,7 @@ export const investmentsView = {
 
 function historyTable(rows, { withInvestor = false, edit = false } = {}) {
   if (!rows.length) return emptyState("No investments here yet.");
-  return `<div class="table-wrap"><table class="tbl"><thead><tr><th>Date</th>${withInvestor ? "<th>Investor</th>" : ""}<th>Mode</th><th>Received in / by</th><th>Reference</th><th class="r">Amount</th></tr></thead><tbody>
+  return `<div class="table-wrap"><table class="tbl"><thead><tr><th>Date</th>${withInvestor ? "<th>Investor</th>" : ""}<th>Mode</th><th>Received in / by</th><th>Reference</th><th class="r">Amount</th>${edit ? '<th class="r inv-acts-h"></th>' : ""}</tr></thead><tbody>
     ${rows.map((i) => {
       const h = hidden(i.investorNo);
       return `<tr class="${edit ? "clickable" : ""}" ${edit ? `data-edit="${esc(i.id)}"` : ""}>
@@ -117,13 +117,24 @@ function historyTable(rows, { withInvestor = false, edit = false } = {}) {
       ${withInvestor ? `<td data-label="Investor">${h ? esc(investorName(i.investorNo)) : `${esc(investorName(i.investorNo))} <small class="muted">${esc(i.investorNo)}</small>`}</td>` : ""}
       <td data-label="Mode">${esc(i.mode || "")}</td><td data-label="Received in / by">${esc(i.receivedIn || "")}</td>
       <td data-label="Reference">${h ? '<span class="muted">–</span>' : `${esc(i.reference || "")}${i.notes ? `<small class="muted block">${esc(i.notes)}</small>` : ""}`}</td>
-      <td class="r" data-label="Amount"><b>${money(i.amount)}</b></td></tr>`;
+      <td class="r" data-label="Amount"><b>${money(i.amount)}</b></td>
+      ${edit ? `<td class="r inv-acts"><button class="btn btn-sm btn-ghost" data-edit-btn="${esc(i.id)}">${icon("edit")}Edit</button><button class="btn btn-sm btn-ghost btn-danger-text" data-del="${esc(i.id)}">${icon("trash")}Delete</button></td>` : ""}</tr>`;
     }).join("")}
-  </tbody><tfoot><tr><td class="primary hide-sm">Total</td>${withInvestor ? '<td class="hide-sm"></td>' : ""}<td class="hide-sm"></td><td class="hide-sm"></td><td class="hide-sm"></td><td class="r" data-label="Total"><b>${money(sum(rows, (i) => i.amount))}</b></td></tr></tfoot></table></div>`;
+  </tbody><tfoot><tr><td class="primary hide-sm">Total</td>${withInvestor ? '<td class="hide-sm"></td>' : ""}<td class="hide-sm"></td><td class="hide-sm"></td><td class="hide-sm"></td><td class="r" data-label="Total"><b>${money(sum(rows, (i) => i.amount))}</b></td>${edit ? '<td class="hide-sm"></td>' : ""}</tr></tfoot></table></div>`;
 }
 
 function bindHistory(root) {
   root.querySelectorAll("[data-edit]").forEach((tr) => tr.addEventListener("click", () => openInvestment(store.get("investments", tr.dataset.edit))));
+  root.querySelectorAll("[data-edit-btn]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); openInvestment(store.get("investments", b.dataset.editBtn)); }));
+  root.querySelectorAll("[data-del]").forEach((b) => b.addEventListener("click", (e) => { e.stopPropagation(); deleteInvestment(store.get("investments", b.dataset.del)); }));
+}
+
+async function deleteInvestment(i) {
+  if (!i || !can("admin")) return false;
+  if (!(await confirmDialog(`Delete this investment of ${money(i.amount)} from ${investorName(i.investorNo)}?`, { okLabel: "Delete", danger: true }))) return false;
+  store.remove("investments", i.id);
+  toast("Investment deleted");
+  return true;
 }
 
 // One investor's history and total. mine: the signed-in investor looking at their own.
@@ -176,11 +187,7 @@ export function openInvestment(existing, presets = {}) {
   const selected = memberId ? options.find((o) => o.value === memberId) : r.investorNo ? { label: r.investorNo } : null;
   const accounts = [...new Set(all().map((i) => i.receivedIn).filter(Boolean))];
   const actions = [{ label: "Cancel", cls: "btn-ghost" }];
-  if (existing) actions.push({ label: "Delete", cls: "btn-ghost btn-danger-text", icon: "trash", onClick: async () => {
-    if (!(await confirmDialog(`Delete this investment of ${money(existing.amount)} from ${investorName(existing.investorNo)}?`, { okLabel: "Delete", danger: true }))) return true;
-    store.remove("investments", existing.id);
-    toast("Investment deleted");
-  } });
+  if (existing) actions.push({ label: "Delete", cls: "btn-ghost btn-danger-text", icon: "trash", onClick: async () => ((await deleteInvestment(existing)) ? undefined : true) });
   actions.push({ label: "Save", cls: "btn-primary", icon: "tick", onClick: ({ el }) => {
     const v = (k) => el.querySelector(`[name="${k}"]`).value.trim();
     const amount = Number(v("amount"));

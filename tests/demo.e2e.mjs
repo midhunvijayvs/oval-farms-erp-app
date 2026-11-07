@@ -291,6 +291,19 @@ for (const vp of [{ width: 1280, height: 860 }, { width: 390, height: 844 }]) {
   text = await view();
   check(text.includes("Latha Nair") && text.includes("OFI-002") && text.includes("₹2,00,000.00") && (await page.$$("tr[data-edit]")).length === 3, `${tag}: investor history with 3 investments and total`);
   await page.screenshot({ path: `${OUT}/investor-${tag}.png`, fullPage: true });
+  check((await page.$$("[data-edit-btn]")).length === 3 && (await page.$$("tr [data-del]")).length === 3, `${tag}: Edit and Delete buttons on each investment`);
+  await page.click("[data-edit-btn]");
+  await page.waitForSelector('.modal:has-text("Edit investment")');
+  await page.fill('.modal [name="amount"]', "60000");
+  await page.click(".modal-foot .btn-primary");
+  await page.waitForTimeout(300);
+  check((await view()).includes("₹60,000.00"), `${tag}: Edit button changes the investment`);
+  const invBefore = (await page.$$("[data-edit-btn]")).length;
+  await page.click("tr [data-del]");
+  await page.waitForSelector(".modal-foot .btn-danger");
+  await page.click(".modal-foot .btn-danger");
+  await page.waitForTimeout(300);
+  check((await page.$$("[data-edit-btn]")).length === invBefore - 1, `${tag}: Delete button removes the investment`);
 
   // Stock shows what's on order
   await page.goto(BASE + "#/stock");
