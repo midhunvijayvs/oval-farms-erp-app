@@ -34,6 +34,8 @@ export function seedDemo() {
     ["oil", { name: "Gingelly Oil", category: "Raw Material", unit: "L", costPrice: 260, gstRate: "5", reorderLevel: 5, openingStock: 12 }],
     ["spice", { name: "Pickle Spice Mix", category: "Raw Material", unit: "kg", costPrice: 380, gstRate: "5", reorderLevel: 2, openingStock: 6 }],
     ["bags", { name: "PP Grow Bags (16x24)", category: "Packaging", unit: "pcs", salePrice: 6, costPrice: 3, gstRate: "18", reorderLevel: 200, openingStock: 600 }],
+    ["obed", { name: "Oyster grow bed", category: "Grow Bed", unit: "bed", costPrice: 0, gstRate: "0" }],
+    ["mbed", { name: "Milky grow bed", category: "Grow Bed", unit: "bed", costPrice: 0, gstRate: "0" }],
     ["jars", { name: "Glass Jar 200 g", category: "Packaging", unit: "pcs", costPrice: 14, gstRate: "18", reorderLevel: 50, openingStock: 140 }],
     ["pouch", { name: "Zip Pouch 100 g", category: "Packaging", unit: "pcs", costPrice: 4, gstRate: "18", reorderLevel: 100, openingStock: 350 }],
   ];
@@ -60,12 +62,16 @@ export function seedDemo() {
 
   const B = {};
   for (const [k, v] of [
-    ["b1", { code: `B-${ym}-001`, mushroomType: "Oyster (Pleurotus)", outputItemId: I.oyster, startDate: d(-40), expectedHarvestDate: d(-20), room: "Fruiting Room", status: "Completed", bags: 120, substrate: "Paddy straw", substrateKg: 240, spawnKg: 12, contaminatedBags: 4 }],
-    ["b2", { code: `B-${ym}-002`, mushroomType: "Oyster (Pleurotus)", outputItemId: I.oyster, startDate: d(-28), expectedHarvestDate: d(-8), room: "Room 1", status: "Harvesting", bags: 150, substrate: "Paddy straw", substrateKg: 300, spawnKg: 15, contaminatedBags: 6 }],
-    ["b3", { code: `B-${ym}-003`, mushroomType: "Milky (Calocybe)", outputItemId: I.milky, startDate: d(-30), expectedHarvestDate: d(-2), room: "Room 2", status: "Harvesting", bags: 80, substrate: "Paddy straw", substrateKg: 160, spawnKg: 8, contaminatedBags: 2 }],
-    ["b4", { code: `B-${ym}-004`, mushroomType: "Oyster (Pleurotus)", outputItemId: I.oyster, startDate: d(-12), expectedHarvestDate: d(5), room: "Incubation Room", status: "Incubation", bags: 140, substrate: "Paddy straw", substrateKg: 280, spawnKg: 14 }],
-    ["b5", { code: `B-${ym}-005`, mushroomType: "Milky (Calocybe)", outputItemId: I.milky, startDate: d(-3), expectedHarvestDate: d(25), room: "Incubation Room", status: "Spawning", bags: 90, substrate: "Paddy straw", substrateKg: 180, spawnKg: 9 }],
-  ]) B[k] = put("batches", v).id;
+    ["b1", { code: `B-${ym}-001`, mushroomType: "Oyster (Pleurotus)", outputItemId: I.oyster, bedItemId: I.obed, bags: 120, startDate: d(-40), expectedHarvestDate: d(-20), room: "Fruiting Room", status: "Discarded (expired)", substrateKg: 240,
+      contaminations: [{ id: "c1", date: d(-30), qty: 4, notes: "Green mould" }], contaminatedBags: 4, discarded: { date: d(-3), qty: 116, prevStatus: "Completed" } }],
+    ["b2", { code: `B-${ym}-002`, mushroomType: "Oyster (Pleurotus)", outputItemId: I.oyster, bedItemId: I.obed, bags: 150, startDate: d(-28), expectedHarvestDate: d(-8), room: "Room 1", status: "Harvesting", substrateKg: 300,
+      contaminations: [{ id: "c2", date: d(-18), qty: 6, notes: "" }], contaminatedBags: 6 }],
+    ["b3", { code: `B-${ym}-003`, mushroomType: "Milky (Calocybe)", outputItemId: I.milky, bedItemId: I.mbed, bags: 80, startDate: d(-30), expectedHarvestDate: d(-2), room: "Room 2", status: "Harvesting", substrateKg: 160,
+      contaminations: [{ id: "c3", date: d(-15), qty: 2, notes: "" }], contaminatedBags: 2 }],
+    ["b4", { code: `B-${ym}-004`, mushroomType: "Oyster (Pleurotus)", outputItemId: I.oyster, bedItemId: I.obed, bags: 140, startDate: d(-12), expectedHarvestDate: d(5), room: "Incubation Room", status: "Incubation", substrateKg: 280 }],
+    ["b5", { code: `B-${ym}-005`, mushroomType: "Milky (Calocybe)", outputItemId: I.milky, bedItemId: I.mbed, bags: 90, startDate: d(-3), expectedHarvestDate: d(25), room: "Incubation Room", status: "Spawning", substrateKg: 180,
+      inputs: [{ itemId: I.straw, qty: 180 }, { itemId: I.mspawn, qty: 9 }, { itemId: I.bags, qty: 90 }] }],
+]) B[k] = put("batches", v).id;
 
   const harv = [
     ["b1", -20, 38], ["b1", -17, 42], ["b1", -13, 35], ["b1", -9, 26], ["b1", -6, 14],

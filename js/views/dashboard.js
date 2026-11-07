@@ -85,7 +85,7 @@ export const dashboardView = {
           <div class="card-head"><h3>Grow rooms</h3><a href="#/batches" class="link">All batches</a></div>
           ${activeBatches.length ? `<div class="mini-list">${activeBatches.sort((a, b) => (a.startDate || "").localeCompare(b.startDate || "")).slice(0, 6).map((b) => {
             const age = b.startDate ? daysBetween(b.startDate, t) : 0;
-            return `<a href="#/batches"><span><b>${esc(b.code)}</b> · ${esc((b.mushroomType || "").split(" (")[0])}<br><small class="muted">Day ${age}${b.room ? " · " + esc(b.room) : ""} · ${num(calc.harvestedKg(b.id))} kg</small></span>${chip(b.status)}</a>`;
+            return `<a href="#/batches/${esc(b.id)}"><span><b>${esc(b.code)}</b> · ${esc((b.mushroomType || "").split(" (")[0])}<br><small class="muted">Day ${age}${b.room ? " · " + esc(b.room) : ""} · ${num(calc.harvestedKg(b.id))} kg</small></span>${chip(b.status)}</a>`;
           }).join("")}</div>` : `<p class="muted">No active batches. <a href="#/batches?new=1">Start one</a>.</p>`}
           ${upcoming.length ? `<p class="small muted">Harvest expected soon: ${upcoming.map((b) => `<b>${esc(b.code)}</b> (${fmtDateShort(b.expectedHarvestDate)})`).join(", ")}</p>` : ""}
         </div>
