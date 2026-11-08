@@ -7,7 +7,7 @@ const hasPacks = (r) => Array.isArray(r.packs) && r.packs.length > 0;
 
 // Editable dropdown lists (Settings > Lists). Defaults suit a mushroom + value-added foods unit.
 export const DEFAULT_LISTS = {
-  itemCategories: ["Fresh Mushroom", "Value-Added Product", "Raw Material", "Packaging", "Consumable"],
+  itemCategories: ["Fresh Mushroom", "Value-Added Product", "Grow Bed", "Raw Material", "Packaging", "Consumable"],
   units: ["kg", "g", "pcs", "pack", "jar", "bag", "box", "L", "ml"],
   mushroomTypes: ["Oyster (Pleurotus)", "Milky (Calocybe)", "Button (Agaricus)", "Shiitake", "Other"],
   substrates: ["Paddy straw", "Wheat straw", "Sawdust", "Compost", "Mixed"],
@@ -30,7 +30,7 @@ export function list(name) {
 
 export const GST_RATES = ["0", "5", "12", "18", "28"];
 
-export const BATCH_STATUSES = ["Spawning", "Incubation", "Fruiting", "Harvesting", "Completed", "Contaminated / Discarded"];
+export const BATCH_STATUSES = ["Spawning", "Incubation", "Fruiting", "Harvesting", "Completed", "Discarded (expired)", "Contaminated / Discarded"];
 export const ACTIVE_BATCH = ["Spawning", "Incubation", "Fruiting", "Harvesting"];
 
 export const schemas = {
@@ -153,11 +153,9 @@ export const schemas = {
       { k: "expectedHarvestDate", label: "Expected first harvest", type: "date", half: true },
       { k: "room", label: "Room / Shed", type: "select", list: "rooms", half: true },
       { k: "status", label: "Status", type: "select", options: BATCH_STATUSES, half: true, default: "Spawning" },
-      { k: "bags", label: "No. of bags / beds", type: "number", half: true },
-      { k: "substrate", label: "Substrate", type: "select", list: "substrates", half: true },
-      { k: "substrateKg", label: "Dry substrate (kg)", type: "number", half: true },
-      { k: "spawnKg", label: "Spawn used (kg)", type: "number", half: true },
-      { k: "contaminatedBags", label: "Contaminated bags", type: "number", half: true },
+      // Inputs used, the beds made (bedItemId × bags), contaminations and discard are edited on the
+      // batch page (js/views/batches.js), which replaces the generic form for this collection.
+      { k: "substrateKg", label: "Dry substrate (kg) (to calculate BE%)", type: "number", half: true },
       { k: "cost", label: "Batch cost (optional)", type: "money", half: true },
       { k: "notes", label: "Notes", type: "textarea" },
     ],

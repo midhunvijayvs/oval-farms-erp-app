@@ -13,6 +13,7 @@ import { listView, openForm } from "./views/crud.js";
 import { dashboardView } from "./views/dashboard.js";
 import { docList, docEditor, docView } from "./views/docs.js";
 import { productionList, productionEditor } from "./views/production.js";
+import { batchList, batchEditor } from "./views/batches.js";
 import { stockView } from "./views/stock.js";
 import { attendanceView } from "./views/attendance.js";
 import { reportsView } from "./views/reports.js";
@@ -26,7 +27,7 @@ import { notesView, noteView } from "./views/notes.js";
 import { logsView } from "./views/logs.js";
 import { logActivity, logWrite, logDelete, seedDemoLog, withoutLog } from "./activity.js";
 
-window.OVAL_VERSION = "2.3.0";
+window.OVAL_VERSION = "2.4.0";
 const cfg = window.OVAL_CONFIG || {};
 const LS = {
   get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } },
@@ -109,7 +110,8 @@ function setupRoutes() {
     }, { allow });
   };
   route("/dashboard", dashboardView);
-  crud("batches"); crud("harvests"); crud("products"); crud("adjustments"); crud("customers");
+  route("/batches", batchList); route("/batches/new", batchEditor); route("/batches/:id", batchEditor);
+  crud("harvests"); crud("products"); crud("adjustments"); crud("customers");
   crud("suppliers", fin); crud("expenses", fin); crud("payments", fin);
   crud("employees"); crud("tasks");
   route("/production", productionList);

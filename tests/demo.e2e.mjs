@@ -292,6 +292,50 @@ for (const vp of [{ width: 1280, height: 860 }, { width: 390, height: 844 }]) {
   check(text.includes("Latha Nair") && text.includes("OFI-002") && text.includes("₹2,00,000.00") && (await page.$$("tr[data-edit]")).length === 3, `${tag}: investor history with 3 investments and total`);
   await page.screenshot({ path: `${OUT}/investor-${tag}.png`, fullPage: true });
 
+  // Grow batches: inputs go out of stock, beds come in; contamination and discard take beds out
+  const stockOf = (name) => page.evaluate(async (n) => {
+    const { store } = await import("./js/store.js"); const calc = await import("./js/calc.js");
+    const it = store.all("products").find((p) => p.name === n); return it ? calc.stockOf(it.id) : null;
+  }, name);
+  await page.goto(BASE + "#/batches");
+  await page.waitForSelector("tr[data-id]");
+  text = await view();
+  check((await page.$$("tr[data-id]")).length === 5 && text.includes("Beds left") && text.includes("Discarded (expired)"), `${tag}: batch list with beds left`);
+  const straw0 = await stockOf("Paddy Straw"), spawn0 = await stockOf("Oyster Spawn"), bed0 = await stockOf("Oyster grow bed");
+  await page.goto(BASE + "#/batches/new");
+  await page.waitForSelector("[data-save]");
+  check(!(await view()).includes("Spawn used") && !(await view()).includes("No. of bags") && (await view()).includes("Dry substrate (kg) (to calculate BE%)"), `${tag}: old batch fields replaced`);
+  await page.selectOption('[data-h="mushroomType"]', "Oyster (Pleurotus)");
+  await page.selectOption('[data-h="outputItemId"]', { label: "Oyster Mushroom (Fresh)" });
+  await page.fill('[data-h="substrateKg"]', "100"); await page.press('[data-h="substrateKg"]', "Tab");
+  await page.selectOption('.line[data-i="0"] [data-f="itemId"]', { label: "Paddy Straw" });
+  await page.fill('.line[data-i="0"] [data-f="qty"]', "100"); await page.press('.line[data-i="0"] [data-f="qty"]', "Tab");
+  await page.click("[data-addin]");
+  await page.selectOption('.line[data-i="1"] [data-f="itemId"]', { label: "Oyster Spawn" });
+  await page.fill('.line[data-i="1"] [data-f="qty"]', "5"); await page.press('.line[data-i="1"] [data-f="qty"]', "Tab");
+  await page.selectOption('[data-h="bedItemId"]', { label: "Oyster grow bed" });
+  await page.fill('[data-h="bags"]', "50"); await page.press('[data-h="bags"]', "Tab");
+  check((await page.textContent(".totals")).includes("1,250.00"), `${tag}: batch cost from inputs (100 × 8 + 5 × 90)`);
+  await page.screenshot({ path: `${OUT}/batch-new-${tag}.png`, fullPage: true });
+  await page.click("[data-save]");
+  await page.waitForSelector("[data-contam]");
+  check(await stockOf("Paddy Straw") === straw0 - 100 && await stockOf("Oyster Spawn") === spawn0 - 5 && await stockOf("Oyster grow bed") === bed0 + 50, `${tag}: saving the batch takes inputs out and puts 50 beds in`);
+  await page.click("[data-contam]");
+  await page.fill('.modal [name="qty"]', "3");
+  await page.click(".modal-foot .btn-primary");
+  await page.waitForTimeout(300);
+  check(await stockOf("Oyster grow bed") === bed0 + 47 && (await page.textContent(".batch-stats")).includes("47"), `${tag}: contamination recorded later takes 3 beds out`);
+  await page.click("[data-discard]");
+  await page.click(".modal-foot .btn-danger");
+  await page.waitForTimeout(300);
+  text = await view();
+  check(await stockOf("Oyster grow bed") === bed0 && text.includes("47 beds discarded") && text.includes("Discarded (expired)"), `${tag}: discarded by expiry takes the 47 beds left out`);
+  await page.screenshot({ path: `${OUT}/batch-discarded-${tag}.png`, fullPage: true });
+  await page.click("[data-undiscard]");
+  await page.click(".modal-foot .btn-primary");
+  await page.waitForTimeout(300);
+  check(await stockOf("Oyster grow bed") === bed0 + 47 && !!(await page.$("[data-discard]")), `${tag}: discard can be undone`);
+
   // Stock shows what's on order
   await page.goto(BASE + "#/stock");
   await page.waitForSelector("tr[data-id]");
