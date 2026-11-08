@@ -59,10 +59,13 @@ export function movements() {
       }
       if (b.discarded && Number(b.discarded.qty)) out.push({ date: b.discarded.date, itemId: b.bedItemId, qty: -Number(b.discarded.qty), type: "Discarded by expiry", ref: b.code, link });
     }
+    const products = new Map(store.all("products").map((p) => [p.id, p]));
     for (const h of store.all("harvests")) {
       const b = batches.get(h.batchId);
       if (!b || !b.outputItemId) continue;
-      out.push({ date: h.date, itemId: b.outputItemId, qty: Number(h.qty) || 0, type: "Harvest", ref: b.code, link: "#/harvests" });
+      // Harvests are entered in kg; a product stocked in grams gets 1000 g per kg.
+      const perKg = kgToStockUnit(products.get(b.outputItemId));
+      out.push({ date: h.date, itemId: b.outputItemId, qty: round3((Number(h.qty) || 0) * perKg), type: "Harvest", ref: b.code, link: "#/harvests" });
     }
     for (const p of store.all("productions")) {
       for (const inp of p.inputs || []) {
@@ -95,6 +98,9 @@ export function stockMap() {
 }
 
 function round3(n) { return Math.round(n * 1000) / 1000; }
+
+// How many of the product's stock units make 1 kg (1000 for grams, else 1).
+export function kgToStockUnit(p) { return p && String(p.unit || "").trim().toLowerCase() === "g" ? 1000 : 1; }
 
 export function stockOf(itemId) { return stockMap().get(itemId) || 0; }
 
