@@ -91,7 +91,7 @@ export function buildPlan(map) {
       factor[key] = f > 0 ? f : 1;
     }
   }
-  if (prod.fresh && factor.fresh !== 1) problems.push(`The fresh mushroom product must be stocked in kg, because harvests are recorded in kg. "${prod.fresh.name}" is stocked in ${prod.fresh.unit || "another unit"}.`);
+  if (prod.fresh && Math.abs(factor.fresh * calc.kgToStockUnit(prod.fresh) - 1) > 1e-9) problems.push(`The fresh mushroom product must be stocked in kg or g, because harvests are recorded in kg. "${prod.fresh.name}" is stocked in ${prod.fresh.unit || "another unit"}.`);
   const q = (key, base) => r3(base / (factor[key] || 1));   // base units -> the product's stock units
   const P = (key) => (prod[key] ? prod[key].id : "");
 
@@ -264,7 +264,7 @@ export function buildPlan(map) {
     if (col === "productions") { for (const i of rec.inputs) move(i.itemId, -i.qty); move(rec.outputItemId, rec.outputQty); }
     if (col === "batches") { for (const i of rec.inputs) move(i.itemId, -i.qty); move(rec.bedItemId, rec.bags); }
   }
-  for (const { col, rec } of records) if (col === "harvests") move(P("fresh"), rec.qty);
+  for (const { col, rec } of records) if (col === "harvests") move(P("fresh"), q("fresh", rec.qty));
 
   const summary = {
     counts: Object.fromEntries(UNDO_ORDER.map((c) => [c, by(c).length])),
