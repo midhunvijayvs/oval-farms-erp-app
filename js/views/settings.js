@@ -104,7 +104,12 @@ function tabData() {
         <button class="btn btn-ghost" data-backup>${icon("download")}Download backup</button>
         ${can("admin") ? `<label class="btn btn-ghost">${icon("upload")}Restore from backup<input type="file" accept="application/json,.json" data-restore hidden></label>` : ""}
       </div>
-    </div>`;
+    </div>
+    ${can("admin") ? `<div class="card">
+      <div class="card-head"><h3>Import the 2026 sheet</h3></div>
+      <p class="muted">One-time import of the 2026 production and sales records kept in Google Sheets before the ERP. You see a full preview first, and it can be undone.</p>
+      <div class="form-actions"><a class="btn btn-ghost" href="#/import-2026">${icon("upload")}Open the import</a></div>
+    </div>` : ""}`;
 }
 
 function tabAppearance() {

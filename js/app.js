@@ -25,6 +25,7 @@ import { deliveryView } from "./views/delivery.js";
 import { investmentsView, investorView, myInvestmentsView } from "./views/investments.js";
 import { notesView, noteView } from "./views/notes.js";
 import { logsView } from "./views/logs.js";
+import { import2026View } from "./views/import2026.js";
 import { logActivity, logWrite, logDelete, seedDemoLog, withoutLog } from "./activity.js";
 
 window.OVAL_VERSION = "2.4.0";
@@ -142,6 +143,7 @@ function setupRoutes() {
   route("/notes", notesView, { allow: () => can("notes") });
   route("/notes/:id", noteView, { allow: () => can("notes") });
   route("/logs", logsView, { allow: () => can("logs") });
+  route("/import-2026", import2026View, { allow: () => can("admin") });
 }
 
 // ---------------- screens ----------------
