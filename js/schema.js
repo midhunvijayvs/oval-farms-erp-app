@@ -8,7 +8,7 @@ const hasPacks = (r) => Array.isArray(r.packs) && r.packs.length > 0;
 // Editable dropdown lists (Settings > Lists). Defaults suit a mushroom + value-added foods unit.
 export const DEFAULT_LISTS = {
   itemCategories: ["Fresh Mushroom", "Value-Added Product", "Grow Bed", "Raw Material", "Packaging", "Consumable"],
-  units: ["kg", "g", "pcs", "pack", "jar", "bag", "box", "L", "ml"],
+  units: ["kg", "g", "pcs", "pack", "jar", "bag", "box", "bed", "cm", "m", "L", "ml"],
   mushroomTypes: ["Oyster (Pleurotus)", "Milky (Calocybe)", "Button (Agaricus)", "Shiitake", "Other"],
   substrates: ["Paddy straw", "Wheat straw", "Sawdust", "Compost", "Mixed"],
   rooms: ["Room 1", "Room 2", "Incubation Room", "Fruiting Room"],
